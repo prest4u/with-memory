@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eric-memory"
+version = "0.1.0"
+description = "Local-first client memory system: owned SQLite, deprecate-not-delete, CLI + MCP"
+requires-python = ">=3.10"
+readme = "README.md"
+authors = [{ name = "Eric" }]
+
+[project.scripts]
+eric-memory = "eric_memory.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+eric_memory = ["py.typed"]

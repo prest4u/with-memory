@@ -1,0 +1,12 @@
+---
+description: Eric Memory 读写合同（开工先搜，作废不删）
+alwaysApply: true
+---
+
+本仓库是本机记忆系统。先读 `skills/严格技能.md`。
+
+- 只经 `bin/eric-memory` 或 `mcp/server.py` 读写，禁止私自改 `memory.db`
+- 开工先 `search`；默认结果里的 deprecated 不是现行
+- 写入 1–3 句指针；矛盾则新条 active、旧条 deprecate
+- 已登记且用户点头的源才能收割，不默认全盘扫
+- 不写凭据、未成年人到课/个体表现、整段会话

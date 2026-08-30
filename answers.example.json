@@ -1,0 +1,24 @@
+{
+  "tier": "simple",
+  "data_dir": "/ABS/eric-memory-data",
+  "vault": "/ABS/eric-memory-data/vault",
+  "folders": [
+    "/ABS/Documents/work"
+  ],
+  "harnesses": [
+    {
+      "key": "qwen",
+      "display_name": "Qwen Code",
+      "session_root": "",
+      "harvest_ok": false,
+      "mcp_mounted": false
+    },
+    {
+      "key": "other",
+      "display_name": "客户自备工具",
+      "session_root": "/ABS/approved-sessions",
+      "harvest_ok": true,
+      "mcp_mounted": false
+    }
+  ]
+}
