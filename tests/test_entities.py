@@ -9,13 +9,13 @@ from eric_memory.entities import collect_entities, is_pure_name, split_entity_to
 
 class EntityTests(unittest.TestCase):
     def test_rejects_mixed_script(self) -> None:
-        self.assertTrue(is_pure_name("刘昱铄"))
+        self.assertTrue(is_pure_name("示例学员"))
         self.assertTrue(is_pure_name("Qingyun"))
-        self.assertTrue(is_pure_name("EC-011"))
-        self.assertFalse(is_pure_name("EC-011 刘昱铄"))
+        self.assertTrue(is_pure_name("STU-0001"))
+        self.assertFalse(is_pure_name("STU-0001 示例学员"))
 
     def test_splits_mixed_labels(self) -> None:
-        self.assertEqual(split_entity_tokens("EC-011 刘昱铄"), ["EC-011", "刘昱铄"])
+        self.assertEqual(split_entity_tokens("STU-0001 示例学员"), ["STU-0001", "示例学员"])
 
     def test_quoted_and_explicit(self) -> None:
         names = collect_entities('品牌已定名「青云未来」。', ["青云"])

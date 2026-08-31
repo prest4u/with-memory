@@ -41,7 +41,7 @@ def main() -> int:
     service = MemoryService(DATA)
     try:
         status = service.status()
-        verify = service.verify(["刘昱铄", "青云"])
+        verify = service.verify(["example-name", "青云"])
         if not verify["ok"]:
             gaps.append("deprecated leaked into default search")
         cli = service.search("青云", include_files=False, limit=5)

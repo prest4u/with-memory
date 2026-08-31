@@ -63,7 +63,7 @@ def main() -> int:
             },
         )
         search = _rpc(service, "memory_search", {"query": "验收门"})
-        verify = service.verify(["刘昱铄", "青云", "验收门"])
+        verify = service.verify(["example-name", "青云", "验收门"])
         indexed = service.index_files(str(INDEX_SAMPLE))
         synced = service.sync(actor="mac-gate")
         vault = Path(synced["vault_dir"])

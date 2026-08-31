@@ -3,13 +3,13 @@
 所有 harness 共用同一条 stdio 服务器：
 
 ```text
-python3 /ABS/REPO/mcp/server.py --data-dir /ABS/DATA
+python3 /ABS/with-memory/mcp/server.py --data-dir /ABS/eric-memory-data
 ```
 
 Windows：
 
 ```text
-py -3 C:\ABS\REPO\mcp\server.py --data-dir C:\ABS\DATA
+py -3 C:\ABS\with-memory\mcp\server.py --data-dir C:\ABS\eric-memory-data
 ```
 
 服务器使用 `Content-Length` 帧，工具名以 `memory_` 开头，与 CLI 动词对齐。

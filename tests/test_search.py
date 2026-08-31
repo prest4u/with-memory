@@ -5,19 +5,19 @@ from tests.helpers import TempServiceTest
 
 class SearchTests(TempServiceTest):
     def test_chinese_like_and_default_hides_deprecated(self) -> None:
-        self.service.add("刘昱铄现行课表仍按日期加主题命名。", entities=["刘昱铄"])
-        old = self.service.add("刘昱铄曾用第N讲编号，这条将被作废。", entities=["刘昱铄"])
-        self.service.deprecate(old["fact"]["fact_id"], reason="命名规则已改")
+        self.service.add("示例学员现行指针仍是有效行。", entities=["示例学员"])
+        old = self.service.add("示例学员旧指针将被作废。", entities=["示例学员"])
+        self.service.deprecate(old["fact"]["fact_id"], reason="指针已改")
 
-        current = self.service.search("刘昱铄", include_files=False)
+        current = self.service.search("示例学员", include_files=False)
         self.assertTrue(all(item["status"] == "active" for item in current["facts"]))
         self.assertEqual(len(current["facts"]), 1)
 
-        leaked = self.service.verify(["刘昱铄"])
+        leaked = self.service.verify(["示例学员"])
         self.assertTrue(leaked["ok"])
         self.assertEqual(leaked["reports"][0]["deprecated_leaked_into_default"], [])
 
-        with_old = self.service.search("刘昱铄", include_deprecated=True, include_files=False)
+        with_old = self.service.search("示例学员", include_deprecated=True, include_files=False)
         self.assertGreaterEqual(len(with_old["facts"]), 2)
 
     def test_mixed_query_tokenizes(self) -> None:

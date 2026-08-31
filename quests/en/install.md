@@ -14,7 +14,7 @@ The product is With. The command is `eric-memory`.
 - Do not connect to a cloud. Do not create a GitHub / Gitee repository for the user.
 - Do not modify an existing Holograph / Hermes `memory_store.db`.
 - Once a path is written to config, it must be absolute. Never store an unexpanded `~`.
-- Call only this repository’s `bin/eric-memory` or `python3 -m eric_memory`. No private SQL `INSERT`.
+- Call only this repository’s `bin/eric-memory`. No private SQL `INSERT`. From a raw clone use `python3 bin/eric-memory` (that entry puts `src` on the path). `python3 -m eric_memory` is not official; if you want it, set `PYTHONPATH=src` or `pip install -e .` first.
 
 ## 0. Find the repository
 

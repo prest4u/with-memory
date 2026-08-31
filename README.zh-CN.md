@@ -73,6 +73,7 @@ Windows 用 `py -3` 和 `%USERPROFILE%\eric-memory-data`。`~` 只在 `init` 时
 | 导入 | `import holograph --source …` | `memory_import` |
 | 索引资料夹 | `index-files` | `memory_index_files` |
 | 登记工具 | `harness add` | `memory_harness_add` |
+| 列出已登记工具 | `harness list` | `memory_harness_list` |
 
 禁止对 `memory.db` 私自 `INSERT`。合同见 [skills/严格技能.md](skills/严格技能.md)。Cursor 模板见 [.cursor/mcp.json.example](.cursor/mcp.json.example)。
 

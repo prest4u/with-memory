@@ -56,7 +56,7 @@ def make_holograph_fixture(path: Path) -> Path:
     rows = [
         (1, "青云现行品牌是青云未来。", "project", "project:青云未来,status:active", 0.9),
         (2, "青云曾用名只叫青云，现已作废。", "project", "project:青云,status:deprecated", 0.4),
-        (3, "刘昱铄是 EC-011，初二下，天津中考。", "teaching", "student:刘昱铄", 0.8),
+        (3, "Alex Rivera is STU-0001, Grade 9, midterm track.", "teaching", "student:示例学员", 0.8),
         (4, "未标注状态的旧条应导入为现行。", "general", "", 0.5),
         (5, "同一条同时写了 ready 和 deprecated，必须按作废导入。", "teaching", "status:ready,status:deprecated", 0.4),
     ]
@@ -65,8 +65,8 @@ def make_holograph_fixture(path: Path) -> Path:
         rows,
     )
     conn.execute("INSERT INTO entities(entity_id, name) VALUES (1, '青云')")
-    conn.execute("INSERT INTO entities(entity_id, name) VALUES (2, '刘昱铄')")
-    conn.execute("INSERT INTO entities(entity_id, name) VALUES (3, 'EC-011 刘昱铄')")
+    conn.execute("INSERT INTO entities(entity_id, name) VALUES (2, '示例学员')")
+    conn.execute("INSERT INTO entities(entity_id, name) VALUES (3, 'STU-0001 示例学员')")
     conn.execute("INSERT INTO fact_entities(fact_id, entity_id) VALUES (1, 1)")
     conn.execute("INSERT INTO fact_entities(fact_id, entity_id) VALUES (2, 1)")
     conn.execute("INSERT INTO fact_entities(fact_id, entity_id) VALUES (3, 2)")

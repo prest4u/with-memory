@@ -3,7 +3,7 @@
     "eric-memory": {
       "command": "python3",
       "args": [
-        "/ABS/eric-memory/mcp/server.py",
+        "/ABS/with-memory/mcp/server.py",
         "--data-dir",
         "/ABS/eric-memory-data"
       ]

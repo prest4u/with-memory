@@ -234,7 +234,7 @@ def _dispatch(service: MemoryService, args: argparse.Namespace) -> int:
             _print(service.catalog(), True)
             return 0
     if args.command == "verify":
-        queries = args.expect_query or ["刘昱铄", "青云"]
+        queries = args.expect_query or ["example-name", "青云"]
         payload = service.verify(queries)
         _print(payload, True)
         return 0 if payload["ok"] else 1

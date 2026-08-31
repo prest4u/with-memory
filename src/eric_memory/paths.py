@@ -18,9 +18,19 @@ class PathError(ValueError):
     """Raised when a path is missing, relative, or still contains '~'."""
 
 
+def _has_unexpanded_home(raw: str) -> bool:
+    folded = raw.casefold()
+    return (
+        "~" in raw
+        or "$home" in folded
+        or "${home}" in folded
+        or "%userprofile%" in folded
+    )
+
+
 def require_absolute(path: str | Path, *, name: str) -> Path:
     raw = str(path)
-    if "~" in raw:
+    if _has_unexpanded_home(raw):
         raise PathError(f"{name} must be an already-expanded absolute path, got {raw!r}")
     p = Path(raw)
     if not p.is_absolute():
@@ -29,12 +39,16 @@ def require_absolute(path: str | Path, *, name: str) -> Path:
 
 
 def expand_once(path: str | Path, *, name: str) -> Path:
-    """Allow a user-supplied '~' only at the boundary, then freeze the result."""
+    """Allow '~' / $HOME / %USERPROFILE% only at the boundary, then freeze the result."""
     raw = str(path).strip()
     if not raw:
         raise PathError(f"{name} is empty")
-    expanded = Path(os.path.expanduser(raw)).resolve()
-    return require_absolute(expanded, name=name)
+    expanded = os.path.expandvars(os.path.expanduser(raw))
+    candidate = Path(expanded)
+    # resolve() would turn leftover $HOME or %USERPROFILE% into cwd/<literal>.
+    if not candidate.is_absolute():
+        raise PathError(f"{name} must be an already-expanded absolute path, got {raw!r}")
+    return require_absolute(candidate.resolve(), name=name)
 
 
 def default_data_dir() -> Path:

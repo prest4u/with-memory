@@ -73,6 +73,7 @@ The data directory never enters Git.
 | Import | `import holograph --source …` | `memory_import` |
 | Index a folder | `index-files` | `memory_index_files` |
 | Register a tool | `harness add` | `memory_harness_add` |
+| List registered tools | `harness list` | `memory_harness_list` |
 
 Do not `INSERT` into `memory.db` by hand. The contract is [skills/严格技能.md](skills/严格技能.md). A Cursor template is [.cursor/mcp.json.example](.cursor/mcp.json.example).
 

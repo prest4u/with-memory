@@ -22,9 +22,9 @@ class ImportTests(TempServiceTest):
         historical = self.service.search("青云", include_deprecated=True, include_files=False)
         self.assertTrue(any("曾用名" in item["content"] for item in historical["facts"]))
 
-        liu = self.service.search("刘昱铄", include_files=False)
-        self.assertGreaterEqual(len(liu["facts"]), 1)
-        self.assertTrue(all(item["status"] == "active" for item in liu["facts"]))
+        student = self.service.search("示例学员", include_files=False)
+        self.assertGreaterEqual(len(student["facts"]), 1)
+        self.assertTrue(all(item["status"] == "active" for item in student["facts"]))
 
         double_status = self.service.search("必须按作废导入", include_deprecated=True, include_files=False)
         self.assertEqual(double_status["facts"][0]["status"], "deprecated")
@@ -39,4 +39,4 @@ class ImportTests(TempServiceTest):
     def test_parse_status_deprecated_wins_over_earlier_status(self) -> None:
         self.assertEqual(parse_status_from_tags("status:ready,status:deprecated"), "deprecated")
         self.assertEqual(parse_status_from_tags("status:active"), "active")
-        self.assertIsNone(parse_status_from_tags("student:刘昱铄"))
+        self.assertIsNone(parse_status_from_tags("student:示例学员"))

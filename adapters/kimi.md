@@ -1,18 +1,37 @@
-# Kimi Code
+# Kimi Code / Kimi Desktop
 
-本机常见会话根（先确认存在，再请用户点头）：
+## Kimi Code
+
+Typical session root after expanding `$HOME` and confirming it exists:
 
 ```text
-$HOME/.kimi/sessions
+$HOME/.kimi-code/sessions
 ```
 
-会话文件常见为 `wire.jsonl`、`context.jsonl`。每日任务最多把该目录当资料夹索引，禁止把 jsonl 全文写成事实。登记前把 `$HOME` 展开成绝对路径。
+MCP goes in `$HOME/.kimi-code/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "eric-memory": {
+      "command": "python3",
+      "args": [
+        "/ABS/with-memory/mcp/server.py",
+        "--data-dir",
+        "/ABS/eric-memory-data"
+      ]
+    }
+  }
+}
+```
 
 ```bash
 python3 "$REPO/bin/eric-memory" --data-dir "$DATA" harness add \
   --key kimi --name "Kimi Code" \
-  --session-root "$HOME/.kimi/sessions" \
-  --harvest
+  --session-root "$HOME/.kimi-code/sessions" \
+  --harvest --mcp-mounted
 ```
 
-大陆提示：C 端新购曾暂停。以用户本机是否已装为准，不要引导去未授权渠道。
+If this machine still has leftover `$HOME/.kimi/sessions` from a migration, register that separately. Do not write the KimiCU binary.
+
+Mainland note: consumer new purchases were paused. Use whatever is already installed; do not steer people to unofficial channels.

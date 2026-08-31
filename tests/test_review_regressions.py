@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from eric_memory.mcp_server import _as_bool, _as_entities, _parse_data_dir, dispatch_tool, handle_rpc
-from eric_memory.store import today_utc, utc_now
 from tests.helpers import TempServiceTest
+from eric_memory.mcp_server import _as_bool, _as_entities, _parse_data_dir, dispatch_tool, handle_rpc
+from eric_memory.paths import PathError, expand_once, load_config
+from eric_memory.store import today_utc, utc_now
 
 
 class ReviewRegressionTests(TempServiceTest):
@@ -102,3 +104,55 @@ class ReviewRegressionTests(TempServiceTest):
         self.assertEqual(_parse_data_dir(["--data-dir=/tmp/mem"]), "/tmp/mem")
         self.assertEqual(_parse_data_dir(["--foo", "--data-dir", "/tmp/mem"]), "/tmp/mem")
         self.assertEqual(_parse_data_dir(["--data-dir", "/tmp/ok"]), "/tmp/ok")
+
+    def test_expand_once_does_not_store_unexpanded_home_or_relative(self) -> None:
+        tilde = expand_once("~/eric-memory-probe-dir", name="data dir")
+        self.assertEqual(tilde, (Path.home() / "eric-memory-probe-dir").resolve())
+        self.assertNotIn("~", str(tilde))
+
+        fake_home = self.data_dir / "fake-home"
+        fake_home.mkdir()
+        previous = os.environ.get("HOME")
+        os.environ["HOME"] = str(fake_home)
+        try:
+            from_env = expand_once("$HOME/mem-data", name="data dir")
+        finally:
+            if previous is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = previous
+        self.assertEqual(from_env, (fake_home / "mem-data").resolve())
+        self.assertNotIn("$HOME", str(from_env))
+        self.assertNotIn("~", str(from_env))
+
+        with self.assertRaises(PathError):
+            expand_once("eric-memory-data", name="data dir")
+        with self.assertRaises(PathError):
+            expand_once("./data", name="data dir")
+        if os.name == "nt" and os.environ.get("USERPROFILE"):
+            win = expand_once(r"%USERPROFILE%\eric-memory-probe-dir", name="data dir")
+            self.assertEqual(
+                win,
+                (Path(os.environ["USERPROFILE"]) / "eric-memory-probe-dir").resolve(),
+            )
+            self.assertNotIn("%USERPROFILE%", str(win))
+        else:
+            with self.assertRaises(PathError):
+                expand_once(r"%USERPROFILE%\eric-memory-probe-dir", name="data dir")
+
+        previous = os.environ.get("HOME")
+        os.environ["HOME"] = str(fake_home)
+        try:
+            self.service.init(data_dir="$HOME/stored-data", write_repo_pointer=False)
+        finally:
+            if previous is None:
+                os.environ.pop("HOME", None)
+            else:
+                os.environ["HOME"] = previous
+        cfg = load_config(fake_home / "stored-data")
+        self.assertIsNotNone(cfg)
+        for stored in (cfg.data_dir, cfg.vault_dir, cfg.db_path):
+            self.assertNotIn("$HOME", stored)
+            self.assertNotIn("~", stored)
+            self.assertNotIn("%USERPROFILE%", stored)
+            self.assertTrue(Path(stored).is_absolute())
