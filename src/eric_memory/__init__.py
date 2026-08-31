@@ -1,4 +1,4 @@
-"""Eric Memory: local-first fact store with invalidate-not-delete."""
+"""With.: local-first fact store. The command remains eric-memory."""
 
 from .service import MemoryService
 

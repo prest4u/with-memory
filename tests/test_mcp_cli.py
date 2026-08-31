@@ -84,3 +84,12 @@ class McpCliTests(TempServiceTest):
     def test_bin_and_mcp_entrypoints_exist(self) -> None:
         self.assertTrue((ROOT / "bin" / "eric-memory").is_file())
         self.assertTrue((ROOT / "mcp" / "server.py").is_file())
+
+    def test_cli_version_does_not_require_a_command(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / "bin" / "eric-memory"), "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("eric-memory 0.1.0", completed.stdout)

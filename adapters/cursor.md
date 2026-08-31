@@ -2,15 +2,15 @@
 
 ## CLI
 
-Cursor Agent 直接调用：
+Cursor Agent calls the same command. Replace the placeholders with absolute paths on this machine:
 
 ```bash
-python3 /Users/eric/Documents/eric-memory/bin/eric-memory --data-dir /Users/eric/eric-memory-data search "……"
+python3 /ABS/with-memory/bin/eric-memory --data-dir /ABS/eric-memory-data search "…"
 ```
 
 ## MCP
 
-在 Cursor 的 MCP 设置里增加 stdio 服务器（路径按本机改）：
+Add a stdio server in Cursor MCP settings:
 
 ```json
 {
@@ -18,15 +18,15 @@ python3 /Users/eric/Documents/eric-memory/bin/eric-memory --data-dir /Users/eric
     "eric-memory": {
       "command": "python3",
       "args": [
-        "/Users/eric/Documents/eric-memory/mcp/server.py",
+        "/ABS/with-memory/mcp/server.py",
         "--data-dir",
-        "/Users/eric/eric-memory-data"
+        "/ABS/eric-memory-data"
       ]
     }
   }
 }
 ```
 
-写入仓库 `.cursor/mcp.json` 或本机 `~/.cursor/mcp.json`（空文件就直接写成上面这段）。新开一轮 Cursor 对话后应能看到 `memory_search`。
+Write that into the project `.cursor/mcp.json` or the user-level `~/.cursor/mcp.json`. An empty file can be replaced with the block above. A new Cursor chat should then see `memory_search`.
 
-把 `skills/严格技能.md` 放进项目或用户规则。不要把整个 Cursor 工程目录登记为可收割会话源，除非用户明确点头。
+Put `skills/严格技能.md` in the project or user rules. Do not register the whole Cursor workspace as a harvestable session root unless the user clearly agrees.

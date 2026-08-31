@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Mac gate. Does not write facts or touch Holograph."""
+"""Mac live gate plus portable repo check. Live half skips when those paths are absent."""
 
 from __future__ import annotations
 
@@ -10,52 +10,33 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+SCRIPTS = Path(__file__).resolve().parent
+for path in (SRC, SCRIPTS):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
-from eric_memory.catalog import catalog_dicts
-from eric_memory.mcp_server import TOOLS, dispatch_tool
+from eric_memory.mcp_server import dispatch_tool
 from eric_memory.service import MemoryService
+
+from repo_check import collect_gaps
 
 HOLOGRAPH = Path("/Users/eric/.hermes/profiles/eric/memory_store.db")
 DATA = Path("/Users/eric/eric-memory-data")
-PLAN_KEYS = {
-    "kimi",
-    "qwen",
-    "lingma",
-    "workbuddy",
-    "codebuddy",
-    "zcode",
-    "minimax",
-    "trae",
-    "comate",
-    "openclaw",
-    "cursor",
-    "claude",
-    "codex",
-    "hermes",
-    "grok",
-    "other",
-}
-NEED_MCP = {
-    "memory_status",
-    "memory_add",
-    "memory_search",
-    "memory_deprecate",
-    "memory_sync",
-    "memory_import",
-    "memory_index_files",
-    "memory_harness_add",
-    "memory_harness_list",
-}
 
 
 def main() -> int:
-    gaps: list[str] = []
+    gaps = collect_gaps()
+    payload: dict = {"ok": not gaps, "gaps": list(gaps), "portable": True, "live": False}
+
+    if not (HOLOGRAPH.is_file() and DATA.is_dir() and (DATA / "memory.db").is_file()):
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0 if payload["ok"] else 1
+
     holograph = sqlite3.connect(f"file:{HOLOGRAPH}?mode=ro", uri=True)
     h_count = holograph.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
-    if h_count != 565:
-        gaps.append(f"holograph count {h_count} != 565")
+    holograph.close()
+    if h_count < 565:
+        gaps.append(f"holograph count {h_count} below archived import of 565")
 
     service = MemoryService(DATA)
     try:
@@ -69,30 +50,16 @@ def main() -> int:
         mcp_ids = [f["fact_id"] for f in mcp["structuredContent"]["facts"]]
         if cli_ids != mcp_ids:
             gaps.append("cli/mcp search mismatch")
-        keys = {item["key"] for item in catalog_dicts()}
-        if PLAN_KEYS - keys:
-            gaps.append(f"catalog missing {sorted(PLAN_KEYS - keys)}")
-        mcp_names = {tool["name"] for tool in TOOLS}
-        if NEED_MCP - mcp_names:
-            gaps.append(f"mcp missing {sorted(NEED_MCP - mcp_names)}")
         home = Path(status["vault_dir"]) / "记忆首页.md"
         text = home.read_text(encoding="utf-8") if home.is_file() else ""
         for token in ("现行", "已过期", "资料夹", "已接工具"):
             if token not in text:
                 gaps.append(f"vault home missing {token}")
-        if not (ROOT / "AGENTS.md").is_file():
-            gaps.append("AGENTS.md missing")
-        mcp_local = ROOT / ".cursor" / "mcp.json"
-        mcp_example = ROOT / ".cursor" / "mcp.json.example"
-        has_local = mcp_local.is_file() and "eric-memory" in mcp_local.read_text(encoding="utf-8")
-        has_example = mcp_example.is_file() and "eric-memory" in mcp_example.read_text(encoding="utf-8")
-        if not (has_local or has_example):
-            gaps.append("project mcp.json.example missing eric-memory")
-        if not (ROOT / "skills" / "严格技能.md").is_file():
-            gaps.append("strict skill missing")
         payload = {
             "ok": not gaps,
             "gaps": gaps,
+            "portable": True,
+            "live": True,
             "holograph_facts": h_count,
             "counts": status["counts"],
             "harnesses": [h["key"] for h in status["harnesses"]],

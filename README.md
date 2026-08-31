@@ -1,61 +1,89 @@
-# Eric Memory
+[English](README.md) · [中文](README.zh-CN.md)
 
-客户装在自己电脑上的本机记忆系统。机器真值是自有 SQLite；人看的窗口是 Obsidian；各家 AI 工具通过同一条 CLI / MCP 读写。
+# With.
 
-**作废不删。** 现行是 `active`，历史是 `deprecated` + `superseded_by`。默认搜索不会把过期条目当成现行。
+Things that stay with you.
 
-第一版只在客户本机。不做 App、不做云、不装开机守护、不要求管理员权限。
+With is a persistent memory layer for your harness.
 
-## 两档
+The source of truth is an owned SQLite file on your machine. People look at an Obsidian vault. Every tool talks to the same CLI or stdio MCP. Facts are invalidated, not deleted.
 
-| 档 | 给谁 | 怎么用 |
-| --- | --- | --- |
-| 简易 | 大陆客户 | 把 `quests/安装任务.md` 贴给手头的 AI，按问答题完装。之后只开 Obsidian「记忆首页」，每天让 AI 跑一次同步任务。 |
-| 完整 | 你（维护者） | 同上，外加从旧 Holograph 导入、跑测试、补 adapter。 |
+The product is **With.** The command is still `eric-memory`, so existing installs keep working.
 
-说明：[docs/简易.md](docs/简易.md) · [docs/完整.md](docs/完整.md) · [docs/windows-linux.md](docs/windows-linux.md)
+## Stay
 
-## 需要什么
+A current fact is `active`. A retired fact is `deprecated` plus `superseded_by`. Default search does not treat history as current. Nothing is erased to make a new present.
 
-- Python 3.10+（macOS / Windows / Linux 皆可）
-- Obsidian（只给人看，不当真值）
-- 任意能跑终端命令或挂 MCP 的 AI 工具
+That is the whole philosophy, in one line: leave what was true, and write what is true now.
 
-不需要 Neo4j、Mem0、云账号、全局 PATH、管理员。
+## Architecture
 
-## 最快自检（完整档）
-
-在仓库根目录：
-
-```bash
-python3 -m unittest discover -s tests -v
-python3 bin/eric-memory --data-dir "$HOME/eric-memory-data" init --tier full
-python3 bin/eric-memory --data-dir "$HOME/eric-memory-data" status
-python3 scripts/acceptance_check.py
+```mermaid
+flowchart TB
+  quest[Install_or_daily_quest]
+  cli[CLI_and_MCP]
+  store[Owned_SQLite]
+  vault[Obsidian_projection]
+  harness[Registered_harness]
+  quest --> cli
+  harness --> cli
+  cli --> store
+  store --> vault
 ```
 
-Windows 把 `python3` 换成 `py -3`，把 `$HOME/eric-memory-data` 换成 `%USERPROFILE%\eric-memory-data`。
+No app. No cloud. No login daemon. No admin rights. Zero third-party runtime packages. Python 3.10+ is enough.
 
-## 官方入口
+## Two tiers
 
-| 动作 | CLI | MCP |
+| Tier | Who | How |
 | --- | --- | --- |
-| 初始化 | `init` | （安装任务执行一次） |
-| 状态 | `status` | `memory_status` |
-| 写入 | `add` | `memory_add` |
-| 检索 | `search` | `memory_search` |
-| 作废 | `deprecate` | `memory_deprecate` |
-| 同步 | `sync` | `memory_sync` |
-| 导入 | `import holograph --source …` | `memory_import` |
-| 索引资料夹 | `index-files` | `memory_index_files` |
-| 登记工具 | `harness add` | `memory_harness_add` |
+| Simple | Anyone installing on their own machine | Paste [`quests/en/install.md`](quests/en/install.md) into the AI you already use. Then open the Obsidian home note. Run the daily quest when you want the vault refreshed. |
+| Full | Maintainers | The same, plus a read-only Holograph import, tests, and adapters. |
 
-禁止对数据库私自 `INSERT`。技能合同见 [skills/严格技能.md](skills/严格技能.md)。
+Guides: [Introduction](docs/en/introduction.md) · [Simple](docs/en/simple.md) · [Full](docs/en/full.md) · [CLI and MCP](docs/en/cli-mcp.md) · [Windows / Linux](docs/en/windows-linux.md)
 
-## 明确不做（第一版）
+Chinese copies live next to them in [`docs/`](docs/) and [`quests/`](quests/).
 
-- 不把 Mem0 / Graphiti / Cognee / Supermemory 当内核
-- 不把 Obsidian 当真值
-- 不静默扫描全盘
-- 不把厂商基准分当验收
-- 未打磨完成前不建 GitHub、不给客户 zip
+## Install
+
+```bash
+python3 -m unittest discover -s tests -q
+python3 scripts/repo_check.py
+python3 bin/eric-memory --version
+python3 bin/eric-memory --data-dir "$HOME/eric-memory-data" init --tier simple
+python3 bin/eric-memory --data-dir "$HOME/eric-memory-data" status
+```
+
+On Windows use `py -3` and `%USERPROFILE%\eric-memory-data`. Expand `~` once at init. After that, only absolute paths.
+
+Or skip the terminal: give [`quests/en/install.md`](quests/en/install.md) to your harness and answer the questionnaire.
+
+The data directory never enters Git.
+
+## Official surface
+
+| Action | CLI | MCP |
+| --- | --- | --- |
+| Initialize | `init` | (once, from the install quest) |
+| Status | `status` | `memory_status` |
+| Write | `add` | `memory_add` |
+| Search | `search` | `memory_search` |
+| Invalidate | `deprecate` | `memory_deprecate` |
+| Sync | `sync` | `memory_sync` |
+| Import | `import holograph --source …` | `memory_import` |
+| Index a folder | `index-files` | `memory_index_files` |
+| Register a tool | `harness add` | `memory_harness_add` |
+
+Do not `INSERT` into `memory.db` by hand. The contract is [skills/严格技能.md](skills/严格技能.md). A Cursor template is [.cursor/mcp.json.example](.cursor/mcp.json.example).
+
+## What v1 will not do
+
+- Use Mem0, Graphiti, Cognee, or Supermemory as the kernel
+- Treat Obsidian as the source of truth
+- Scan the whole disk in silence
+- Treat a vendor leaderboard as acceptance
+- Ship a client zip, a cloud, or a background service
+
+## License
+
+[MIT](LICENSE)

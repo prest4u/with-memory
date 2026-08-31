@@ -5,10 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "eric-memory"
 version = "0.1.0"
-description = "Local-first client memory system: owned SQLite, deprecate-not-delete, CLI + MCP"
+description = "With.: local-first memory for your harness. Owned SQLite, deprecate-not-delete, CLI + MCP"
 requires-python = ">=3.10"
 readme = "README.md"
+license = { text = "MIT" }
 authors = [{ name = "Eric" }]
+keywords = ["memory", "mcp", "obsidian", "local-first", "sqlite"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Database",
+  "Intended Audience :: Developers",
+]
 
 [project.scripts]
 eric-memory = "eric_memory.cli:main"

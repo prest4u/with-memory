@@ -1,43 +1,45 @@
 # Hermes Agent
 
-## 不要做的
+## Do not
 
-- 不要把本系统装进旧的 Holograph 插件树
-- 不要改 `~/.hermes/profiles/*/memory_store.db`
-- 导入成功前，旧 Holograph 继续可用；成功后新写入走本仓库
+- Do not install this system into the old Holograph plugin tree
+- Do not edit `~/.hermes/profiles/*/memory_store.db`
+- Until import succeeds, the old Holograph store can stay in use; after it succeeds, new writes go through this repository
 
 ## CLI
 
+Replace the placeholders with absolute paths on this machine:
+
 ```bash
-python3 /Users/eric/Documents/eric-memory/bin/eric-memory --data-dir /Users/eric/eric-memory-data search "……"
+python3 /ABS/with-memory/bin/eric-memory --data-dir /ABS/eric-memory-data search "…"
 ```
 
-## 会话目录
+## Session directory
 
-仅当用户点头时登记，例如：
+Register only when the user agrees, for example:
 
 ```bash
-python3 /Users/eric/Documents/eric-memory/bin/eric-memory --data-dir /Users/eric/eric-memory-data \
+python3 /ABS/with-memory/bin/eric-memory --data-dir /ABS/eric-memory-data \
   harness add --key hermes --name "Hermes Agent" \
-  --session-root /Users/eric/.hermes/profiles/eric \
+  --session-root /ABS/hermes-profile \
   --harvest
 ```
 
-收割只索引文件路径，不会把 `memory_store.db` 再写回旧格式。
+Harvest indexes file paths. It does not write `memory_store.db` back into the old format.
 
 ## MCP
 
-在 profile 的 `config.yaml` 增加（不要改 `memory.provider: holographic`，旧库继续作归档）：
+Add this to the profile `config.yaml`. Do not change `memory.provider: holographic`; the old store stays an archive:
 
 ```yaml
 mcp_servers:
   eric-memory:
     command: python3
     args:
-      - /Users/eric/Documents/eric-memory/mcp/server.py
+      - /ABS/with-memory/mcp/server.py
       - --data-dir
-      - /Users/eric/eric-memory-data
+      - /ABS/eric-memory-data
     timeout: 120
 ```
 
-重启 Hermes 后工具名一般是 `mcp_eric-memory_memory_search` 这类前缀。新写入走这些工具或 CLI，不要再 `INSERT` 进 `memory_store.db`。
+After a Hermes restart, tool names are usually prefixed like `mcp_eric-memory_memory_search`. New writes go through those tools or the CLI. Do not `INSERT` into `memory_store.db`.

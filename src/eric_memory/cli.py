@@ -7,6 +7,7 @@ import json
 import sys
 from typing import Any
 
+from . import __version__
 from .service import MemoryService
 
 
@@ -42,14 +43,19 @@ def _split_entities(raw: str | None) -> list[str]:
     return [part.strip() for part in raw.replace("，", ",").split(",") if part.strip()]
 
 
-def _peel_globals(argv: list[str] | None) -> tuple[list[str], str | None, bool]:
+def _peel_globals(argv: list[str] | None) -> tuple[list[str], str | None, bool, bool]:
     raw = list(sys.argv[1:] if argv is None else argv)
     data_dir: str | None = None
     as_json = False
+    as_version = False
     kept: list[str] = []
     index = 0
     while index < len(raw):
         token = raw[index]
+        if token in {"--version", "-V"}:
+            as_version = True
+            index += 1
+            continue
         if token == "--json":
             as_json = True
             index += 1
@@ -64,7 +70,7 @@ def _peel_globals(argv: list[str] | None) -> tuple[list[str], str | None, bool]:
             continue
         kept.append(token)
         index += 1
-    return kept, data_dir, as_json
+    return kept, data_dir, as_json, as_version
 
 
 def _service(args: argparse.Namespace) -> MemoryService:
@@ -78,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--data-dir", help="绝对数据目录，或仅在边界使用 ~")
     parser.add_argument("--json", action="store_true", help="机器可读输出")
+    parser.add_argument("--version", "-V", action="store_true", help="打印版本后退出")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="创建数据目录、库和 Obsidian 首页")
@@ -134,7 +141,10 @@ def main(argv: list[str] | None = None) -> int:
     p_verify = sub.add_parser("verify", help="验收：默认检索不把过期当现行")
     p_verify.add_argument("--expect-query", action="append", default=[])
 
-    kept, data_dir, as_json = _peel_globals(argv)
+    kept, data_dir, as_json, as_version = _peel_globals(argv)
+    if as_version:
+        print(f"eric-memory {__version__}")
+        return 0
     args = parser.parse_args(kept)
     if data_dir:
         args.data_dir = data_dir

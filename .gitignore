@@ -6,7 +6,10 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .eric-memory-local/
+*.db
 *.db-journal
+*.db-wal
+*.db-shm
 .DS_Store
 .data-dir
 .cursor/debug-*.log

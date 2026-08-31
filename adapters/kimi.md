@@ -3,15 +3,15 @@
 本机常见会话根（先确认存在，再请用户点头）：
 
 ```text
-/Users/<name>/.kimi/sessions
+$HOME/.kimi/sessions
 ```
 
-会话文件常见为 `wire.jsonl`、`context.jsonl`。每日任务最多把该目录当资料夹索引，禁止把 jsonl 全文写成事实。
+会话文件常见为 `wire.jsonl`、`context.jsonl`。每日任务最多把该目录当资料夹索引，禁止把 jsonl 全文写成事实。登记前把 `$HOME` 展开成绝对路径。
 
 ```bash
 python3 "$REPO/bin/eric-memory" --data-dir "$DATA" harness add \
   --key kimi --name "Kimi Code" \
-  --session-root /Users/<name>/.kimi/sessions \
+  --session-root "$HOME/.kimi/sessions" \
   --harvest
 ```
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import unittest
 from pathlib import Path
 
@@ -20,3 +21,11 @@ class PathTests(unittest.TestCase):
 
     def test_src_layout_is_importable(self) -> None:
         self.assertTrue((SRC / "eric_memory" / "service.py").is_file())
+
+    def test_repo_check_is_portable(self) -> None:
+        scripts = str(Path(__file__).resolve().parents[1] / "scripts")
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        from repo_check import collect_gaps
+
+        self.assertEqual(collect_gaps(), [])
