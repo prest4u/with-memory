@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-from eric_memory.mcp_server import handle_rpc
 from tests.helpers import ROOT, TempServiceTest
+from eric_memory import mcp_server
+from eric_memory.mcp_server import _read_message, handle_rpc
 
 
 class McpCliTests(TempServiceTest):
@@ -80,6 +82,21 @@ class McpCliTests(TempServiceTest):
         assert listed is not None
         names = {tool["name"] for tool in listed["result"]["tools"]}
         self.assertTrue({"memory_add", "memory_search", "memory_deprecate", "memory_status"} <= names)
+
+    def test_stdio_accepts_cursor_ndjson_initialize(self) -> None:
+        mcp_server._stdio_framing = "content-length"
+        raw = (
+            b'{"jsonrpc":"2.0","id":0,"method":"initialize","params":'
+            b'{"protocolVersion":"2025-11-25","capabilities":{},'
+            b'"clientInfo":{"name":"cursor-vscode","version":"1.0.0"}}}\n'
+        )
+        message = _read_message(io.BytesIO(raw))
+        self.assertEqual(message["method"], "initialize")
+        self.assertEqual(mcp_server._stdio_framing, "ndjson")
+        reply = handle_rpc(self.service, message)
+        assert reply is not None
+        self.assertEqual(reply["id"], 0)
+        self.assertIn("serverInfo", reply["result"])
 
     def test_bin_and_mcp_entrypoints_exist(self) -> None:
         self.assertTrue((ROOT / "bin" / "eric-memory").is_file())

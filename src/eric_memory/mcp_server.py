@@ -8,6 +8,8 @@ from typing import Any, Callable
 
 from .service import MemoryService
 
+_stdio_framing = "content-length"
+
 PROTOCOL_VERSION = "2024-11-05"
 
 TOOLS = [
@@ -222,6 +224,11 @@ def _read_message(buffer) -> dict | None:
         line = buffer.readline()
         if not line:
             return None
+        # Cursor stdio sends one JSON object per line; other hosts use Content-Length.
+        if line.lstrip().startswith(b"{"):
+            global _stdio_framing
+            _stdio_framing = "ndjson"
+            return json.loads(line.decode("utf-8"))
         if line in (b"\r\n", b"\n"):
             break
         key, value = line.decode("utf-8").split(":", 1)
@@ -235,7 +242,10 @@ def _read_message(buffer) -> dict | None:
 
 def _write_message(payload: dict) -> None:
     raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    sys.stdout.buffer.write(f"Content-Length: {len(raw)}\r\n\r\n".encode("ascii") + raw)
+    if _stdio_framing == "ndjson":
+        sys.stdout.buffer.write(raw + b"\n")
+    else:
+        sys.stdout.buffer.write(f"Content-Length: {len(raw)}\r\n\r\n".encode("ascii") + raw)
     sys.stdout.buffer.flush()
 
 
@@ -278,6 +288,8 @@ def handle_rpc(service: MemoryService, message: dict) -> dict | None:
 
 
 def run(data_dir: str | None = None) -> None:
+    global _stdio_framing
+    _stdio_framing = "content-length"
     service = MemoryService(data_dir)
     try:
         while True:
