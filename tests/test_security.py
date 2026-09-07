@@ -101,7 +101,9 @@ class WindowsInvocationTests(unittest.TestCase):
         decoded = base64.b64decode(command[-1]).decode("utf-16-le")
         self.assertEqual(command[-2], "-EncodedCommand")
         self.assertNotIn(path, decoded)
-        self.assertEqual(json.loads(runner.call_args.kwargs["env"]["WITH_ACL_ARGUMENTS_JSON"]), [path])
+        self.assertEqual(
+            json.loads(runner.call_args.kwargs["env"]["WITH_ACL_ARGUMENTS_JSON"]), {"target": path, "kind": ""}
+        )
 
     @unittest.skipUnless(os.name == "nt", "requires a real Windows ACL")
     def test_real_windows_private_directory_and_file(self) -> None:
