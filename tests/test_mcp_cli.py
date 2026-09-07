@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import sys
+from unittest.mock import patch
 
 from eric_memory import mcp_server
 from eric_memory.mcp_server import _read_message, handle_rpc
@@ -20,8 +22,14 @@ class McpCliTests(TempServiceTest):
             "--json",
             *args,
         ]
-        completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        completed = subprocess.run(cmd, check=False, capture_output=True, encoding="utf-8")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
         return json.loads(completed.stdout)
+
+    def test_chinese_cli_pipe_is_utf8_under_a_legacy_code_page(self) -> None:
+        with patch.dict(os.environ, {"PYTHONIOENCODING": "cp1252"}):
+            result = self._cli("add", "--content", "中文管道测试。", "--entities", "编码测试")
+            self.assertEqual(result["fact"]["content"], "中文管道测试。")
 
     def test_cli_accepts_json_after_subcommand(self) -> None:
         added = self._cli("add", "--content", "尾部 json 旗标必须可用。", "--entities", "探针")
@@ -34,7 +42,7 @@ class McpCliTests(TempServiceTest):
             "探针",
             "--json",
         ]
-        completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        completed = subprocess.run(cmd, check=True, capture_output=True, encoding="utf-8")
         found = json.loads(completed.stdout)
         self.assertEqual(found["facts"][0]["fact_id"], added["fact"]["fact_id"])
 

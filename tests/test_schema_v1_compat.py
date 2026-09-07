@@ -69,7 +69,7 @@ class SchemaV1CompatTests(unittest.TestCase):
                 "list",
             ],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
         self.assertEqual(result.returncode, 1)
         self.assertEqual(json.loads(result.stderr)["error"]["code"], "MIGRATION_REQUIRED")

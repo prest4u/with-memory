@@ -24,7 +24,10 @@ def validate_project(project: str) -> ScopeSpec:
 
 
 def _identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
-    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+    # CPython 3.12 Windows lstat retains creation time in st_ctime while fstat
+    # exposes change time. Birth time is consistent across both APIs.
+    stamp = getattr(info, "st_birthtime_ns", info.st_ctime_ns) if os.name == "nt" else info.st_ctime_ns
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, stamp
 
 
 def read_source(source: dict[str, Any], locator: str) -> str:
@@ -95,7 +98,12 @@ def read_source(source: dict[str, Any], locator: str) -> str:
             size += len(block)
             if size > maximum:
                 raise ValidationError("context input exceeds the approved file size limit")
-        if _identity(opened) != _identity(os.fstat(fd)) or _identity(opened) != _identity(path.lstat()):
+        after_read = os.fstat(fd)
+        if (
+            _identity(opened) != _identity(after_read)
+            or opened.st_ctime_ns != after_read.st_ctime_ns
+            or _identity(opened) != _identity(path.lstat())
+        ):
             raise ValidationError("source changed during capture; retry once the file is stable")
         if not path.resolve(strict=True).is_relative_to(root):
             raise ValidationError("source escaped its approved directory")

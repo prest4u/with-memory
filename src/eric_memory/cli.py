@@ -662,6 +662,11 @@ def _dispatch_update(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # CLI pipes have a stable UTF-8 contract even under a Windows legacy code page.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", newline="\n")
     parser = build_parser()
     kept, data_dir, as_json, as_version = _peel_globals(argv)
     if as_version:

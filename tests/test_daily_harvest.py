@@ -24,10 +24,11 @@ class DailyHarvestTests(TempServiceTest):
     def _cli(self, *args: str) -> dict:
         result = subprocess.run(
             [sys.executable, str(ROOT / "bin/eric-memory"), "--data-dir", str(self.data_dir), "--json", *args],
-            check=True,
+            check=False,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
+        self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
     def test_interrupted_harvest_redelivers_changes_after_restart(self) -> None:

@@ -20,7 +20,9 @@ class ContextMcpTests(TempServiceTest):
         root = (self.data_dir.parent / "Inputs 中文 with spaces").resolve()
         root.mkdir()
         (root / "build.log").write_text(
-            "\n".join(f"INFO item={i} completed" for i in range(3000)) + "\nERROR Orchid failed at module Widget\n"
+            "\n".join(f"INFO item={i} completed" for i in range(3000)) + "\nERROR Orchid failed at module Widget\n",
+            encoding="utf-8",
+            newline="\n",
         )
         self.service.add("Orchid uses the Widget module.", scope="project", project=project)
         source = self.service.source_approve(str(root), harness_key="codex")["source"]

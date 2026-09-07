@@ -4,6 +4,8 @@
 
 Both surfaces call the same request validation and service layer. The database remains authoritative if an optional projection fails.
 
+CLI stdout and stderr use UTF-8, including Windows pipes. Scripts should decode both streams as UTF-8.
+
 ## Global CLI form
 
 ```text
