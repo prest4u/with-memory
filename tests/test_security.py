@@ -108,10 +108,12 @@ class WindowsInvocationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "private 中文 $literal ' quoted"
             root.mkdir()
-            applied = _run_powershell(WINDOWS_SET_ACL, str(root), "directory")
-            self.assertEqual(applied.returncode, 0, applied.stderr)
-            self.assertTrue(private_path_status(root, expected=0o700)["ok"])
-            target = root / "private.txt"
-            target.write_text("synthetic", encoding="utf-8")
-            harden_private_path(target, directory=False)
-            self.assertTrue(private_path_status(target, expected=0o600)["ok"])
+            # Simulate inheritance from a parent shell with incompatible modules.
+            with patch.dict(os.environ, {"PSModulePath": str(root / "unrelated modules")}):
+                applied = _run_powershell(WINDOWS_SET_ACL, str(root), "directory")
+                self.assertEqual(applied.returncode, 0, applied.stderr)
+                self.assertTrue(private_path_status(root, expected=0o700)["ok"])
+                target = root / "private.txt"
+                target.write_text("synthetic", encoding="utf-8")
+                harden_private_path(target, directory=False)
+                self.assertTrue(private_path_status(target, expected=0o600)["ok"])

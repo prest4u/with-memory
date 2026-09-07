@@ -72,7 +72,11 @@ def _powershell() -> str:
 def _run_powershell(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
     # Windows PowerShell treats trailing -Command arguments as script text.
     # Keep paths in per-process JSON data, separate from the fixed program.
-    prefix = "$withArguments = @(ConvertFrom-Json $env:WITH_ACL_ARGUMENTS_JSON)\n"
+    # Python may inherit PowerShell 7 module paths; use this host's built-ins only.
+    prefix = (
+        "$env:PSModulePath = [System.IO.Path]::Combine($PSHOME, 'Modules')\n"
+        "$withArguments = @(ConvertFrom-Json $env:WITH_ACL_ARGUMENTS_JSON)\n"
+    )
     encoded = base64.b64encode((prefix + script).encode("utf-16-le")).decode("ascii")
     environment = {**os.environ, "WITH_ACL_ARGUMENTS_JSON": json.dumps(arguments)}
     return subprocess.run(  # noqa: S603 - absolute executable, fixed script, no shell

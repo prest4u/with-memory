@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -49,14 +50,14 @@ class PostCommitResultTests(TempServiceTest):
             migrated = migrate_apply(data, database)
             self.assertTrue(migrated["committed"])
             self.assertEqual(migrated["configuration"], "pending")
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 self.assertEqual(
                     connection.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0], "2"
                 )
             rolled = migrate_rollback(data, database)
             self.assertTrue(rolled["committed"])
             self.assertEqual(rolled["configuration"], "pending")
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 self.assertEqual(
                     connection.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0], "1"
                 )

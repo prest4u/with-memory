@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -198,7 +199,7 @@ class ContextTests(TempServiceTest):
         def change_source(*args, **kwargs):
             result = original_create(*args, **kwargs)
             if kwargs.get("kind") == "pre-restore":
-                with sqlite3.connect(source) as connection:
+                with closing(sqlite3.connect(source)) as connection, connection:
                     connection.execute("DROP TRIGGER facts_ai")
             return result
 

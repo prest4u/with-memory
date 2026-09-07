@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 import uuid
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -216,7 +217,7 @@ class BackupRestorePurgeTests(TempServiceTest):
             backup = self.service.backup_create()["backup"]
             source = self.data_dir / f"missing-{defect}.sqlite3"
             source.write_bytes(Path(backup["path"]).read_bytes())
-            with sqlite3.connect(source) as connection:
+            with closing(sqlite3.connect(source)) as connection, connection:
                 if defect == "fts":
                     connection.execute(
                         "INSERT INTO facts_fts(facts_fts, rowid, content, tags) VALUES('delete', ?, ?, ?)",

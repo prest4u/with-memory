@@ -5,7 +5,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -37,7 +37,7 @@ class MigrationEdgeTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_every_legacy_value_is_preserved_without_normalizing_history(self) -> None:
-        with sqlite3.connect(self.database) as connection:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
             connection.execute(
                 "UPDATE facts SET content='  padded legacy fact  ', category='', as_of=' 2026-01-01 ', "
                 "created_at='', updated_at='2001-02-03T04:05:06Z' WHERE fact_id=7"
@@ -48,7 +48,7 @@ class MigrationEdgeTests(unittest.TestCase):
             original = connection.execute("SELECT * FROM facts ORDER BY fact_id").fetchall()
         result = migrate_apply(self.data_dir, self.database)
         self.assertTrue(result["validation"]["legacy_values_preserved"])
-        with sqlite3.connect(self.database) as connection:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
             columns = (
                 "fact_id,content,category,tags,trust,status,as_of,superseded_by,"
                 "source_kind,source_ref,created_at,updated_at"
@@ -58,7 +58,7 @@ class MigrationEdgeTests(unittest.TestCase):
     def test_revalidate_changes_between_preflight_and_lock(self) -> None:
         @contextmanager
         def acquire(path):
-            with sqlite3.connect(self.database) as connection:
+            with closing(sqlite3.connect(self.database)) as connection, connection:
                 connection.execute("UPDATE facts SET superseded_by=9 WHERE fact_id=7")
             with exclusive_file_lock(path):
                 yield
@@ -104,7 +104,7 @@ class MigrationEdgeTests(unittest.TestCase):
 
     def test_folder_harness_overlap_preserves_harness_ownership(self) -> None:
         root = self.data_dir / "legacy-folder"
-        with sqlite3.connect(self.database) as connection:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
             connection.execute("UPDATE harnesses SET session_root=?, harvest_ok=1 WHERE key='cursor'", (str(root),))
         migrate_apply(self.data_dir, self.database)
         store = MemoryStore(self.database, mode="ro")
@@ -144,7 +144,7 @@ class MigrationEdgeTests(unittest.TestCase):
         sample = self.data_dir / "legacy-folder" / "session.txt"
         sample.write_text("Previously indexed conversation.\n")
         os.utime(sample, ns=(1_000_000_000, 1_000_000_000))
-        with sqlite3.connect(self.database) as connection:
+        with closing(sqlite3.connect(self.database)) as connection, connection:
             connection.execute(
                 "INSERT INTO files(path,folder,name,sha256,size,mtime,indexed_at) VALUES (?,?,?,?,?,1,?)",
                 (
