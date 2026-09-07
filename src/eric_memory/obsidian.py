@@ -206,7 +206,7 @@ def remove_managed_projection(vault_dir: str | Path) -> list[str]:
         if path.exists():
             path.unlink()
             removed.append(str(path))
-    if root.is_dir():
+    if os.name != "nt" and root.is_dir():
         directory_fd = os.open(root, os.O_RDONLY)
         try:
             os.fsync(directory_fd)
