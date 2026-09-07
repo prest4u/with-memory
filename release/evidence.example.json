@@ -1,0 +1,37 @@
+{
+  "format": "with-release-evidence-v1",
+  "version": "1.0.0-rc.1",
+  "source_commit": "0000000000000000000000000000000000000000",
+  "harnesses": {
+    "codex": {"status": "passed", "tested_at": "2026-01-01T00:00:00Z", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    "claude-code": {"status": "passed", "tested_at": "2026-01-01T00:00:00Z", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    "cursor": {"status": "passed", "tested_at": "2026-01-01T00:00:00Z", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    "hermes": {"status": "passed", "tested_at": "2026-01-01T00:00:00Z", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    "kimi": {"status": "passed", "tested_at": "2026-01-01T00:00:00Z", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    "qwen": {"status": "passed", "tested_at": "2026-01-01T00:00:00Z", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
+  },
+  "reviews": {
+    "security": {"status": "passed", "reviewer": "reviewer-security", "source_commit": "0000000000000000000000000000000000000000", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    "migration": {"status": "passed", "reviewer": "reviewer-migration", "source_commit": "0000000000000000000000000000000000000000", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    "privacy": {"status": "passed", "reviewer": "reviewer-privacy", "source_commit": "0000000000000000000000000000000000000000", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"},
+    "release": {"status": "passed", "reviewer": "reviewer-release", "source_commit": "0000000000000000000000000000000000000000", "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"}
+  },
+  "migration": {
+    "synthetic_fixture": "passed",
+    "real_database_plan": "passed_read_only",
+    "backup_verified": true,
+    "real_database_modified": false
+  },
+  "mcp_conformance": {
+    "status": "blocked",
+    "runner": "@modelcontextprotocol/conformance",
+    "runner_version": "0.1.16",
+    "transport": "stdio",
+    "target": "shipping-server",
+    "suite": "server-active",
+    "spec_versions": ["2025-11-25"],
+    "tested_at": "2026-01-01T00:00:00Z",
+    "evidence_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "recorded_at": "2026-01-01T00:00:00Z"
+}

@@ -1,48 +1,45 @@
-[English](architecture.md) · [中文](../完整.md)
+[English](architecture.md) · [中文](../../README.zh-CN.md)
 
 # Architecture
 
 ```mermaid
 flowchart TB
-  quest[Install_or_daily_quest]
-  cli[CLI_and_MCP]
-  store[Owned_SQLite]
-  vault[Obsidian_projection]
-  harness[Registered_harness]
-  quest --> cli
-  harness --> cli
-  cli --> store
-  store --> vault
+  subgraph Untrusted[Harness boundary]
+    H[principal + grants]
+    S[approved source]
+  end
+  H -->|active search / candidate submit| M[official SDK stdio MCP]
+  S -->|incremental metadata| M
+  A[local interactive admin CLI] -->|review / source consent / recovery| V[shared validation + service]
+  M --> V
+  V -->|BEGIN IMMEDIATE + file lock| Q[(SQLite schema v2 truth)]
+  Q --> E[atomic optional Obsidian projection]
+  Q --> B[verified managed backups]
+  Q --> L[redacted events and operation logs]
 ```
 
-## Truth
+## Storage kernel
 
-`memory.db` inside the data directory is the only source of truth. Schema lives in the Python package. Writes go through `MemoryService`. There is no second writer.
+The connection boundary has read-only, read/write-existing, and create modes. All state changes use one write transaction primitive and a cross-platform lock. Facts retain integer IDs and gain stable UIDs. Fact bodies are immutable. Active uniqueness is `(normalized_content_hash, scope_fingerprint)`; the same sentence may exist in separate scopes. Supersession is an explicit acyclic graph.
 
-A fact has `status`. `active` is current. `deprecated` is history. `superseded_by` points at the row that replaced it. Simple tier has no purge.
+Schema v2 separates principals/grants, structured scopes, sources/source files/scan runs, candidate lifecycle, fact-source links, supersessions, audit events, and change events. Events identify objects and operations without duplicating fact bodies.
 
-## Search
+## Trusted write path
 
-1. Entity names first.
-2. If the query has CJK, LIKE with AND across tokens.
-3. Latin queries use FTS5, then LIKE on a miss.
+A normal harness can only produce a pending candidate from an assigned source. Content policy runs before persistence. Local review accepts or rejects; acceptance creates the fact, optional supersession links, audit/change events, and source link in one `BEGIN IMMEDIATE` transaction. Projection happens after the authoritative commit and reports dirty state independently.
 
-Default filters to `active`. Pass `--include-deprecated` when you need the trail.
+## Retrieval
 
-## Projection
+ACL, scope, and status are applied before ranking. Candidate sets come from exact entity, aliases, CJK unigram/bigram plus Latin tokens, FTS5/BM25, and escaped literal LIKE. Versioned weighted reciprocal-rank fusion combines every channel. Entity hits never short-circuit the other channels. Deprecated rows require explicit history permission.
 
-`sync` and every write path refresh the vault: home, current, expired, folders, harnesses. Notes are generated. Editing them in Obsidian does not change the database.
+## Source indexing
 
-## Harvest
+Consent records the canonical root and rules. Scans use `lstat`, reject symbolic links, re-check containment, skip unchanged files by mtime/size, and hash only changed regular files. Missing records become stale. A truncated walk is an explicit failed run and never advances the cursor. File/session bodies are not stored.
 
-Daily sync only reads directories that are registered, have an absolute `session_root`, and have `harvest_ok`. The catalog is open. Unknown tools are added with the add-harness quest, not by forking the kernel.
+## Migration and recovery
 
-File indexers store paths, not file bodies.
+Migration builds and validates a separate database before atomic replacement. Backups use SQLite's backup API and carry hashes/metadata. Restore is also side-by-side. Purge is an exceptional local workflow that removes target content, managed copies, WAL/projection remnants, then compacts and verifies the database.
 
-## Import
+## Distribution boundary
 
-Full tier can import a read-only Holograph `memory_store.db`. Rows keep their deprecated tags. Untagged rows become `active` with `as_of` set to the import day. Dedup key is `source_kind=import` plus `source_ref=holograph:<id>`. The old file is never written.
-
-## Boundaries
-
-No daemon. No cloud API. No admin install. No default full-disk walk. MCP is stdio with `Content-Length` frames. CLI and MCP expose the same verbs.
+Runtime resources use package resources, not repository-relative writes. `bin/eric-memory` and `mcp/server.py` remain v1 shims. Native PyInstaller onedir builds are produced independently on four target platforms. No daemon, cloud API, HTTP listener, account system, vector database, or telemetry exists in v1.

@@ -5,6 +5,16 @@ __pycache__/
 venv/
 .pytest_cache/
 .mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+release/*.zip
+release/*-manifest.json
+release/*-manifest.json.sig
+release/*-sbom.cdx.json
+release/SHA256SUMS
+sbom.cdx.json
 .eric-memory-local/
 *.db
 *.db-journal

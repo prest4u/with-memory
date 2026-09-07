@@ -16,14 +16,18 @@ class HarnessTests(TempServiceTest):
         with self.assertRaises(ValueError):
             self.service.harness_add("kimi", harvest_ok=True)
 
-        other = self.service.harness_add(
+        sessions = self.data_dir / "sessions"
+        sessions.mkdir()
+        self.service.harness_add(
             "other",
             display_name="客户自备工具",
-            session_root=str(self.data_dir / "sessions"),
-            harvest_ok=True,
+            session_root=str(sessions),
         )
-        (self.data_dir / "sessions").mkdir()
-        (self.data_dir / "sessions" / "note.txt").write_text("hello", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self.service.harness_add("other", harvest_ok=True)
+        self.service.source_approve(str(sessions), harness_key="other")
+        other = self.service.harness_add("other", harvest_ok=True)
+        (sessions / "note.txt").write_text("hello", encoding="utf-8")
         synced = self.service.sync()
         harvested_keys = {item["key"] for item in synced["harvest"]}
         self.assertIn("other", harvested_keys)

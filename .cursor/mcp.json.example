@@ -5,7 +5,9 @@
       "args": [
         "/ABS/with-memory/mcp/server.py",
         "--data-dir",
-        "/ABS/eric-memory-data"
+        "/ABS/eric-memory-data",
+        "--principal",
+        "cursor"
       ]
     }
   }

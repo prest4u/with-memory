@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
+import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
+FROZEN = ROOT / ("eric-memory.exe" if os.name == "nt" else "eric-memory")
+if not SRC.is_dir() and FROZEN.is_file():
+    os.execv(str(FROZEN), [str(FROZEN), *sys.argv[1:]])
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 

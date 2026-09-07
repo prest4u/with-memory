@@ -1,97 +1,15 @@
 [English](daily-sync.md) · [中文](../每日同步任务.md)
 
-# Quest: sync memory
+# Quest: trusted memory sync
 
-You are updating the user’s local memory. Read `skills/严格技能.md` in this repository first, then act.
+Read `skills/严格技能.md`. Search current authorized scope first. A normal harness submits candidates and never directly activates, deprecates, reviews, or purges facts.
 
-The product is With. The command is `eric-memory`.
+For harvesting: list assigned sources, begin a run, read only returned changed files inside the canonical root, distill 1–3 sentences (maximum 1,200 characters), submit with a stable `submission_uid` and source locator, then complete the run only after success. Never copy source text, secrets, or minor-performance records.
 
-## Hard limits
+Describe possible conflicts in the candidate. The owner runs local `review` and chooses supersession atomically. Do not say a candidate became a fact unless review accepted it.
 
-- Call only this repository’s CLI or MCP. Do not edit `memory.db` yourself.
-- Search first. Expired rows in the default result are not current.
-- Write one to three sentences: what / where / status / next door.
-- On contradiction: `add` the new row, then `deprecate` the old one (or `add --supersedes`).
-- Do not write credentials, secrets, a minor’s attendance or individual performance, or a whole transcript.
-- Read only session directories the user already approved and registered. Do not scan the disk.
-- Do not delete facts. `purge` is out of scope.
+Local unattended maintenance can use `harvest begin SOURCE_UID`, then submit candidates with stable submission IDs, and only after processing every returned file use `harvest complete RUN_UID --cursor CURSOR`. Interrupted or truncated runs redeliver unacknowledged files. Never complete a run with unprocessed files.
 
-## 0. Locate
+`source scan` and plain `sync` perform indexing and immediately acknowledge the scan; they do not distill memories. Do not run them before harvesting. Repair Obsidian using `sync --projection-only` or authorized `memory_sync(projection_only=true)` so pending sessions remain available.
 
-Find repository root `REPO` and data directory `DATA` (common: `$HOME/eric-memory-data` on macOS/Linux). If unsure:
-
-```bash
-python3 "$REPO/bin/eric-memory" --data-dir "$DATA" status
-```
-
-If `status` fails, switch to the install quest. Do not invent a second store.
-
-## 1. Search first
-
-For today’s names, projects, and files:
-
-```bash
-python3 "$REPO/bin/eric-memory" --data-dir "$DATA" search "$QUERY" --scope user
-```
-
-Add `--include-deprecated` only when you need history.
-
-Scopes:
-
-- Daily work: `--scope user`
-- One project: `--scope project --project NAME`
-- One workspace: `--scope workspace --workspace ABSOLUTE_PATH_OR_LABEL`
-
-## 2. Read approved sources (optional)
-
-```bash
-python3 "$REPO/bin/eric-memory" --data-dir "$DATA" harness list
-```
-
-Open only directories with `harvest_ok=true` and a non-empty `session_root`. Extract **pointers**. Do not paste chat logs into facts.
-
-## 3. Write / invalidate
-
-A current change:
-
-```bash
-python3 "$REPO/bin/eric-memory" --data-dir "$DATA" add \
-  --content "One-sentence fact. Paths are absolute. Status is current." \
-  --entities "entity-a,entity-b" \
-  --category project
-```
-
-Replace an old row:
-
-```bash
-python3 "$REPO/bin/eric-memory" --data-dir "$DATA" add \
-  --content "The new present." \
-  --supersedes OLD_ID
-```
-
-Or:
-
-```bash
-python3 "$REPO/bin/eric-memory" --data-dir "$DATA" deprecate OLD_ID \
-  --superseded-by NEW_ID --reason "replaced by the new present"
-```
-
-## 4. Refresh the human window
-
-```bash
-python3 "$REPO/bin/eric-memory" --data-dir "$DATA" sync
-```
-
-This rebuilds the Obsidian home / current / expired / folders / harness notes, and reindexes registered folders plus approved session roots. Files leave a path, not a body.
-
-## 5. Tell the user
-
-List:
-
-- what you searched, which current rows hit
-- which `#id` values you wrote
-- which `#id` values you deprecated, and what replaced them
-- whether the Obsidian home note was refreshed
-- any contradiction that still needs a human decision
-
-On Windows use `py -3` and quoted absolute paths.
+Report queries, changed sources, candidate UIDs/states, conflicts, truncated/stale runs, pending count, and projection state. If `committed=true, projection=dirty`, repair the projection; do not repeat the database write.

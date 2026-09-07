@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from .paths import require_absolute
+from .models import Fact
+from .paths import atomic_write_text, require_absolute
 from .store import MemoryStore
 
 HOME_NAME = "记忆首页.md"
@@ -12,19 +14,27 @@ ACTIVE_NAME = "现行.md"
 DEPRECATED_NAME = "已过期.md"
 FILES_NAME = "资料夹.md"
 HARNESS_NAME = "已接工具.md"
+MANAGED_PAGES = (HOME_NAME, ACTIVE_NAME, DEPRECATED_NAME, FILES_NAME, HARNESS_NAME)
 
 
 def _md_escape(text: str) -> str:
-    return text.replace("\r\n", "\n").replace("\n", " ").strip()
+    value = text.replace("\r\n", "\n").replace("\n", " ").strip()
+    value = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    for marker in ("\\", "`", "*", "_", "[", "]", "|", "#"):
+        value = value.replace(marker, f"\\{marker}")
+    return value
 
 
-def _fact_line(fact) -> str:
+def _code_escape(text: str) -> str:
+    return text.replace("`", "ˋ").replace("\r", " ").replace("\n", " ")
+
+
+def _fact_line(fact: Fact) -> str:
     entities = "、".join(fact.entities[:8])
     extra = f" · {entities}" if entities else ""
     successor = f" → 被 {fact.superseded_by} 取代" if fact.superseded_by else ""
     return (
-        f"- **#{fact.fact_id}** `{fact.category}` {fact.as_of}{extra}{successor}\n"
-        f"  {_md_escape(fact.content)[:400]}\n"
+        f"- **#{fact.fact_id}** `{fact.category}` {fact.as_of}{extra}{successor}\n  {_md_escape(fact.content)[:400]}\n"
     )
 
 
@@ -46,6 +56,7 @@ def render_home(store: MemoryStore) -> str:
         f"- 已索引文件：{counts['files']}",
         f"- 已接工具：{counts['harnesses']}",
         f"- 已点头的资料夹：{counts['folders']}",
+        f"- 待审候选：{counts.get('candidates_pending', 0)}",
         "",
         "## 打开",
         "",
@@ -75,7 +86,7 @@ def render_home(store: MemoryStore) -> str:
     else:
         for folder in folders:
             label = folder["label"] or folder["path"]
-            lines.append(f"- {label}：`{folder['path']}`")
+            lines.append(f"- {_md_escape(label)}：`{_code_escape(folder['path'])}`")
     lines.append("")
     return "\n".join(lines)
 
@@ -120,13 +131,13 @@ def render_files(store: MemoryStore) -> str:
         lines.append("（无）")
     else:
         for folder in folders:
-            lines.append(f"- `{folder['path']}`")
+            lines.append(f"- `{_code_escape(folder['path'])}`")
     lines.extend(["", "## 最近索引的文件", ""])
     if not files:
         lines.append("还没有索引。跑 `eric-memory index-files` 或每日同步。")
     else:
         for item in files[:80]:
-            lines.append(f"- `{item['name']}` — `{item['path']}`")
+            lines.append(f"- `{_code_escape(item['name'])}` — `{_code_escape(item['path'])}`")
     lines.append("")
     return "\n".join(lines)
 
@@ -148,11 +159,11 @@ def render_harnesses(store: MemoryStore) -> str:
         lines.append(f"## {harness.display_name}")
         lines.append("")
         lines.append(f"- 键：`{harness.key}`")
-        lines.append(f"- 会话根：`{root}`")
+        lines.append(f"- 会话根：`{_code_escape(root)}`")
         lines.append(f"- MCP 已挂：{'是' if harness.mcp_mounted else '否'}")
         lines.append(f"- 允许收割：{'是' if harness.harvest_ok else '否'}")
         if harness.notes:
-            lines.append(f"- 备注：{harness.notes}")
+            lines.append(f"- 备注：{_md_escape(harness.notes)}")
         lines.append("")
     return "\n".join(lines)
 
@@ -181,9 +192,27 @@ def write_vault(store: MemoryStore, vault_dir: str | Path) -> dict[str, str]:
     written: dict[str, str] = {}
     for name, body in pages.items():
         path = root / name
-        path.write_text(body, encoding="utf-8")
+        atomic_write_text(path.resolve(), body, mode=0o600)
         written[name] = str(path)
     return written
+
+
+def remove_managed_projection(vault_dir: str | Path) -> list[str]:
+    """Remove With-owned pages when purge cannot safely regenerate them."""
+    root = require_absolute(vault_dir, name="vault dir")
+    removed: list[str] = []
+    for name in MANAGED_PAGES:
+        path = root / name
+        if path.exists():
+            path.unlink()
+            removed.append(str(path))
+    if root.is_dir():
+        directory_fd = os.open(root, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    return removed
 
 
 def copy_template(template_dir: Path, vault_dir: Path) -> None:
@@ -198,4 +227,4 @@ def copy_template(template_dir: Path, vault_dir: Path) -> None:
     for path in template_dir.glob("*.md"):
         target = dest / path.name
         if not target.exists():
-            target.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+            atomic_write_text(target.resolve(), path.read_text(encoding="utf-8"), mode=0o600)

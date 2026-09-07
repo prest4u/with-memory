@@ -5,10 +5,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from tests.helpers import TempServiceTest
-from eric_memory.mcp_server import _as_bool, _as_entities, _parse_data_dir, dispatch_tool, handle_rpc
+from eric_memory.mcp_server import (
+    _as_bool,
+    _as_entities,
+    _parse_data_dir,
+    dispatch_tool,
+    handle_rpc,
+)
 from eric_memory.paths import PathError, expand_once, load_config
 from eric_memory.store import today_utc, utc_now
+from tests.helpers import TempServiceTest
 
 
 class ReviewRegressionTests(TempServiceTest):
@@ -27,21 +33,30 @@ class ReviewRegressionTests(TempServiceTest):
         child.mkdir(parents=True)
         (parent / "root.txt").write_text("root", encoding="utf-8")
         (child / "child.txt").write_text("child", encoding="utf-8")
+        self.service.source_approve(str(parent))
+        self.service.source_approve(str(child))
         self.service.index_files(str(parent))
         report = self.service.index_files(str(child))
         self.assertEqual(report["indexed"][0]["files"], 1)
         paths = {item["path"] for item in self.service.store.list_files()}
         self.assertEqual(len(paths), 2)
 
-    def test_mcp_string_false_is_not_true(self) -> None:
+    def test_mcp_boolean_is_strict_json(self) -> None:
         self.assertFalse(_as_bool("false"))
         self.assertFalse(_as_bool(None))
         self.assertTrue(_as_bool("true"))
         self.service.add("过期不应被字符串 false 翻出来。", entities=["探针"])
-        reply = dispatch_tool(
+        rejected = dispatch_tool(
             self.service,
             "memory_search",
             {"query": "探针", "include_deprecated": "false"},
+        )
+        self.assertTrue(rejected["isError"])
+        self.assertEqual(rejected["structuredContent"]["error"]["code"], "VALIDATION_ERROR")
+        reply = dispatch_tool(
+            self.service,
+            "memory_search",
+            {"query": "探针", "include_deprecated": False},
         )
         self.assertFalse(reply["structuredContent"]["include_deprecated"])
 
@@ -53,8 +68,9 @@ class ReviewRegressionTests(TempServiceTest):
             "other",
             display_name="probe",
             session_root=str(sessions),
-            harvest_ok=True,
         )
+        self.service.source_approve(str(sessions), harness_key="other")
+        self.service.harness_add("other", harvest_ok=True)
         updated = self.service.harness_add("other", display_name="probe-renamed")
         self.assertTrue(updated["harness"]["session_root"])
         self.assertTrue(updated["harness"]["harvest_ok"])
@@ -63,7 +79,7 @@ class ReviewRegressionTests(TempServiceTest):
         gone = self.data_dir / "deleted"
         gone.mkdir()
         (gone / "x.txt").write_text("x", encoding="utf-8")
-        self.service.add_folder(str(gone))
+        self.service.source_approve(str(gone))
         (gone / "x.txt").unlink()
         gone.rmdir()
         report = self.service.index_files()
@@ -80,12 +96,19 @@ class ReviewRegressionTests(TempServiceTest):
         self.assertIn("写入后投影必须立刻可见。", body)
         self.assertIn(f"#{added['fact']['fact_id']}", body)
 
-    def test_mcp_string_entities_are_not_split_into_characters(self) -> None:
+    def test_mcp_entities_require_an_array(self) -> None:
         self.assertEqual(_as_entities("验收门,青云"), ["验收门", "青云"])
-        reply = dispatch_tool(
+        rejected = dispatch_tool(
             self.service,
             "memory_add",
             {"content": "MCP 实体字符串必须整词保留。", "entities": "验收门,青云"},
+        )
+        self.assertTrue(rejected["isError"])
+        self.assertEqual(rejected["structuredContent"]["error"]["code"], "VALIDATION_ERROR")
+        reply = dispatch_tool(
+            self.service,
+            "memory_add",
+            {"content": "MCP 实体数组必须整词保留。", "entities": ["验收门", "青云"]},
         )
         self.assertEqual(set(reply["structuredContent"]["fact"]["entities"]), {"验收门", "青云"})
 

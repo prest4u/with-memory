@@ -1,6 +1,6 @@
 ---
 name: eric-memory
-description: Local memory write gate. Search first. Read and write only through the eric-memory CLI or MCP. Write 1–3 sentence pointers. On contradiction, deprecate the old fact. Do not write with Holograph, query_holographic.py, or memory-append.py.
+description: Local memory candidate gate. Search first. Read and submit only through eric-memory CLI/MCP. Harnesses submit 1–3 sentence candidates; only local interactive review activates facts.
 ---
 
 # 严格技能：Eric Memory
@@ -11,9 +11,9 @@ description: Local memory write gate. Search first. Read and write only through 
 
 1. **只调用本仓库 CLI / MCP。** 禁止私自 `INSERT` / `UPDATE` / 直接改 `memory.db` 或旧 `memory_store.db`。
 2. **开工先 search。** 作用域用 `user` / `workspace` / `project`，与当前任务一致。默认结果里的 `deprecated` 不是现行。
-3. **写入 1–3 句指针。** 写清：是什么、在哪（绝对路径）、状态、下一扇门。
-4. **矛盾则作废。** 新条 `active`，旧条 `deprecate`（或 `add --supersedes`）。不要改写旧行冒充历史从未发生。
-5. **已登记源才收割。** `harness list` 里 `harvest_ok` 且用户点过头的 `session_root` 才能读。禁止默认全盘扫。
+3. **默认只提交 candidate。** 写入 1–3 句、最多 1,200 字符的指针。只有本地交互式管理员审阅后才能成为 `active`。
+4. **矛盾在审阅时显式取代。** 普通 harness 不直接 `deprecate`；管理员在 `review` 中选择被取代事实。
+5. **已批准 source 才收割。** 只处理仍为 `approved` 且分配给本 principal 的来源，禁止默认全盘扫。
 
 ## 禁止
 
@@ -22,7 +22,7 @@ description: Local memory write gate. Search first. Read and write only through 
 - 整段会话、整篇文档原文
 - 把文件正文写成事实（事实里只放路径）
 - 把过期条当成现行建议
-- 删除事实（简易档没有 purge）
+- 调用或模拟 `purge`（仅本地交互式管理员可用）
 - 为每个新 AI 工具重写一套内核
 - 再走 `query_holographic.py add`、`memory-append.py`、或 Hermes `memory.provider: holographic`
 
@@ -34,18 +34,16 @@ eric-memory search "$QUERY" --scope project --project 青云
 eric-memory search "$QUERY" --include-deprecated
 ```
 
-中文短词走 LIKE；实体名优先。不要只信一次 FTS miss。本机数据目录以安装时写下的绝对路径为准。
+检索融合实体、别名、CJK/Latin term、FTS5 与字面 LIKE；普通 harness 看不到历史。本机数据目录以安装时写下的绝对路径为准。
 
-## 写入
+## 候选提交
 
 ```text
-eric-memory add --content "……" --entities "实体1,实体2" --supersedes OLD_ID
-eric-memory deprecate OLD_ID --superseded-by NEW_ID --reason "……"
-eric-memory sync
+eric-memory candidate add --content "……" --entities "实体1,实体2" --scope user
 ```
 
 ## MCP 对照
 
-`memory_search` `memory_add` `memory_deprecate` `memory_sync` `memory_status` `memory_index_files` `memory_harness_add` `memory_harness_list` `memory_import`
+普通 principal 默认可见：`memory_status` `memory_search` `memory_candidate_add` `memory_candidate_list` `memory_source_list` `memory_harvest_begin` `memory_harvest_complete`。MCP 配置必须带 `--principal KEY`；未带时进入只读 `legacy` 身份。
 
 参数与 CLI 相同。不要发明第二套工具名。

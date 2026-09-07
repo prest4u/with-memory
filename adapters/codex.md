@@ -13,6 +13,8 @@ args = [
   "/ABS/with-memory/mcp/server.py",
   "--data-dir",
   "/ABS/eric-memory-data",
+  "--principal",
+  "codex",
 ]
 startup_timeout_sec = 120
 ```
@@ -21,9 +23,9 @@ Session root after the user agrees:
 
 ```bash
 python3 "$REPO/bin/eric-memory" --data-dir "$DATA" harness add \
-  --key codex --name "Codex / OpenAI" \
-  --session-root "$HOME/.codex/sessions" \
-  --harvest --mcp-mounted
+  --key codex --name "Codex / OpenAI" --mcp-mounted
+python3 "$REPO/bin/eric-memory" --data-dir "$DATA" source approve \
+  "$HOME/.codex/sessions" --harness codex
 ```
 
-Skills come from `$HOME/.agents/skills`.
+Skills come from `$HOME/.agents/skills`. The harness submits candidates; local interactive review is the default activation path.

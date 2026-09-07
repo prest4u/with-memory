@@ -21,9 +21,7 @@ def is_pure_name(name: str) -> bool:
         return False
     cjk = bool(CJK_RE.search(stripped))
     latin = bool(LATIN_RE.search(stripped))
-    if cjk and latin:
-        return False
-    return True
+    return not (cjk and latin)
 
 
 def split_entity_tokens(name: str) -> list[str]:

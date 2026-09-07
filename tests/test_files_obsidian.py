@@ -2,15 +2,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from eric_memory.errors import ValidationError
 from tests.helpers import TempServiceTest
 
 
 class FilesObsidianTests(TempServiceTest):
+    def test_legacy_folder_registration_cannot_grant_source_consent(self) -> None:
+        folder = self.data_dir / "unapproved"
+        folder.mkdir()
+        registered = self.service.add_folder(str(folder))
+        self.assertFalse(registered["approved"])
+        self.assertIsNone(self.service.store.source_by_root(folder))
+        with self.assertRaises(ValidationError):
+            self.service.index_files(str(folder))
+
     def test_index_files_returns_paths_not_bodies(self) -> None:
         folder = self.data_dir / "docs"
         folder.mkdir()
         sample = folder / "brief.md"
         sample.write_text("这是正文，不应变成事实。", encoding="utf-8")
+        self.service.source_approve(str(folder))
         report = self.service.index_files(str(folder))
         self.assertEqual(report["indexed"][0]["files"], 1)
         hits = self.service.search("brief", include_files=True)

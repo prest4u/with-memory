@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from tests.helpers import SRC  # noqa: F401 — puts src/ on sys.path
-
 from eric_memory.entities import collect_entities, is_pure_name, split_entity_tokens
+from tests.helpers import SRC  # noqa: F401 — puts src/ on sys.path
 
 
 class EntityTests(unittest.TestCase):
@@ -18,6 +17,6 @@ class EntityTests(unittest.TestCase):
         self.assertEqual(split_entity_tokens("STU-0001 示例学员"), ["STU-0001", "示例学员"])
 
     def test_quoted_and_explicit(self) -> None:
-        names = collect_entities('品牌已定名「青云未来」。', ["青云"])
+        names = collect_entities("品牌已定名「青云未来」。", ["青云"])
         self.assertIn("青云", names)
         self.assertIn("青云未来", names)

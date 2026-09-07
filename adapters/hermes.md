@@ -20,9 +20,9 @@ Register only the sessions folder, not the whole Hermes tree:
 
 ```bash
 python3 /ABS/with-memory/bin/eric-memory --data-dir /ABS/eric-memory-data \
-  harness add --key hermes --name "Hermes Agent" \
-  --session-root /ABS/hermes-profile/sessions \
-  --harvest --mcp-mounted
+  harness add --key hermes --name "Hermes Agent" --mcp-mounted
+python3 /ABS/with-memory/bin/eric-memory --data-dir /ABS/eric-memory-data \
+  source approve /ABS/hermes-profile/sessions --harness hermes
 ```
 
 ## MCP
@@ -35,9 +35,11 @@ mcp_servers:
       - /ABS/with-memory/mcp/server.py
       - --data-dir
       - /ABS/eric-memory-data
+      - --principal
+      - hermes
     timeout: 120
 ```
 
-After import + verify: remove `memory.provider: holographic` (empty = builtin MEMORY.md / USER.md only). Keep `memory_enabled` and `user_profile_enabled`. New fact writes go through eric-memory MCP or CLI.
+After import + verify: remove `memory.provider: holographic` (empty = builtin MEMORY.md / USER.md only). Keep `memory_enabled` and `user_profile_enabled`. New memories enter as candidates and require local review by default.
 
 After a Hermes restart, tool names are usually prefixed like `mcp_eric-memory_memory_search`. Do not `INSERT` into `memory_store.db`.

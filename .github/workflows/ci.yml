@@ -2,26 +2,101 @@ name: ci
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, cursor/shared-eric-memory-skill]
   pull_request:
+  schedule:
+    - cron: "19 3 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  test:
+  portable-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, windows-2025, macos-15, macos-15-intel]
         python-version: ["3.10", "3.12"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Unit tests
+          cache: pip
+      - name: Install audited package installer
+        run: python -m pip install --upgrade "pip==26.2.1"
+      - name: Install locked runtime and development tools
+        run: python -m pip install -e ".[dev]"
+      - name: Unit and integration tests
         run: python -m unittest discover -s tests -v
-      - name: Portable repo check
+      - name: Portable repository contract
         run: python scripts/repo_check.py
-      - name: CLI version
+      - name: CLI compatibility shim
         run: python bin/eric-memory --version
+
+  quality-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install audited package installer
+        run: python -m pip install --upgrade "pip==26.2.1"
+      - name: Install locked runtime and development tools
+        run: python -m pip install -e ".[dev]"
+      - name: Ruff
+        run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Strict mypy
+        run: mypy
+      - name: Branch coverage
+        run: python -m coverage run --branch -m unittest discover -s tests -v
+      - name: Overall coverage gate
+        run: python -m coverage report --fail-under=80
+      - name: Transaction, migration, and permission coverage gate
+        run: python -m coverage report --include="src/eric_memory/transactions.py,src/eric_memory/migration.py,src/eric_memory/permissions.py" --fail-under=95
+      - name: Bilingual retrieval quality gates
+        run: python scripts/evaluate_search.py
+      - name: Synthetic performance smoke
+        run: python scripts/benchmark.py --facts 10000 --files 5000
+      - name: Synthetic end-to-end acceptance
+        run: python scripts/mac_gate.py
+      - name: Dependency vulnerability audit
+        run: |
+          python scripts/export_audit_requirements.py --installed --output /tmp/with-audit-requirements.txt
+          pip-audit --strict --no-deps --disable-pip --requirement /tmp/with-audit-requirements.txt
+      - name: Tracked secret scan
+        run: python scripts/secret_scan.py
+      - name: Generate and validate CycloneDX SBOM
+        run: cyclonedx-py environment --output-format JSON --output-file sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-sbom
+          path: sbom.cdx.json
+          if-no-files-found: error
+
+  reference-performance:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install audited package installer
+        run: python -m pip install --upgrade "pip==26.2.1"
+      - run: python -m pip install -e .
+      - name: 100k facts and 100k files release-scale benchmark
+        run: python scripts/benchmark.py --facts 100000 --files 100000

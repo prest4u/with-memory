@@ -13,6 +13,8 @@ args = [
   "/ABS/with-memory/mcp/server.py",
   "--data-dir",
   "/ABS/eric-memory-data",
+  "--principal",
+  "grok",
 ]
 startup_timeout_sec = 120
 ```
@@ -21,9 +23,9 @@ Session root after the user agrees:
 
 ```bash
 python3 "$REPO/bin/eric-memory" --data-dir "$DATA" harness add \
-  --key grok --name "Grok / xAI" \
-  --session-root "$HOME/.grok/sessions" \
-  --harvest --mcp-mounted
+  --key grok --name "Grok / xAI" --mcp-mounted
+python3 "$REPO/bin/eric-memory" --data-dir "$DATA" source approve \
+  "$HOME/.grok/sessions" --harness grok
 ```
 
 `grok mcp list` should show `eric-memory`. Skills come from `$HOME/.agents/skills`.

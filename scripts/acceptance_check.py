@@ -1,83 +1,74 @@
 #!/usr/bin/env python3
-"""Mac live gate plus portable repo check. Live half skips when those paths are absent."""
+"""Portable contract checks plus opt-in, read-only checks of explicit database copies."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-SCRIPTS = Path(__file__).resolve().parent
-for path in (SRC, SCRIPTS):
-    if str(path) not in sys.path:
-        sys.path.insert(0, str(path))
-
-from eric_memory.mcp_server import dispatch_tool
-from eric_memory.service import MemoryService
+from typing import Any
 
 from repo_check import collect_gaps
 
-HOLOGRAPH = Path("/Users/eric/.hermes/profiles/eric/memory_store.db")
-DATA = Path("/Users/eric/eric-memory-data")
+from eric_memory.mcp_server import dispatch_tool
+from eric_memory.paths import require_absolute
+from eric_memory.service import MemoryService
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-dir", help="explicit absolute data-directory copy to inspect read-only")
+    parser.add_argument("--holograph-copy", help="explicit absolute Holograph copy to count read-only")
+    parser.add_argument("--query", action="append", default=[], help="safe query used for CLI/MCP parity")
+    return parser
+
+
+def _holograph_count(path: str) -> int:
+    source = require_absolute(path, name="holograph copy")
+    connection = sqlite3.connect(f"{source.as_uri()}?mode=ro", uri=True)
+    try:
+        return int(connection.execute("SELECT COUNT(*) FROM facts").fetchone()[0])
+    finally:
+        connection.close()
 
 
 def main() -> int:
+    args = _parser().parse_args()
     gaps = collect_gaps()
-    payload: dict = {"ok": not gaps, "gaps": list(gaps), "portable": True, "live": False}
-
-    if not (HOLOGRAPH.is_file() and DATA.is_dir() and (DATA / "memory.db").is_file()):
+    payload: dict[str, Any] = {"ok": not gaps, "gaps": gaps, "portable": True, "live": False}
+    if args.holograph_copy:
+        payload["holograph_facts"] = _holograph_count(args.holograph_copy)
+    if not args.data_dir:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0 if payload["ok"] else 1
 
-    holograph = sqlite3.connect(f"file:{HOLOGRAPH}?mode=ro", uri=True)
-    h_count = holograph.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
-    holograph.close()
-    if h_count < 565:
-        gaps.append(f"holograph count {h_count} below archived import of 565")
-
-    service = MemoryService(DATA)
+    data_dir = require_absolute(args.data_dir, name="data directory copy")
+    service = MemoryService(data_dir, mode="ro", principal="local")
     try:
-        status = service.status()
-        verify = service.verify(["example-name", "青云"])
-        if not verify["ok"]:
-            gaps.append("deprecated leaked into default search")
-        cli = service.search("青云", include_files=False, limit=5)
-        mcp = dispatch_tool(service, "memory_search", {"query": "青云", "limit": 5})
-        cli_ids = [f["fact_id"] for f in cli["facts"]]
-        mcp_ids = [f["fact_id"] for f in mcp["structuredContent"]["facts"]]
-        if cli_ids != mcp_ids:
-            gaps.append("cli/mcp search mismatch")
-        home = Path(status["vault_dir"]) / "记忆首页.md"
-        text = home.read_text(encoding="utf-8") if home.is_file() else ""
-        for token in ("现行", "已过期", "资料夹", "已接工具"):
-            if token not in text:
-                gaps.append(f"vault home missing {token}")
-        payload = {
-            "ok": not gaps,
-            "gaps": gaps,
-            "portable": True,
-            "live": True,
-            "holograph_facts": h_count,
-            "counts": status["counts"],
-            "harnesses": [h["key"] for h in status["harnesses"]],
-            "verify": [
-                {
-                    "query": row["query"],
-                    "active_hits": row["active_hits"],
-                    "with_deprecated_hits": row["with_deprecated_hits"],
-                    "leaked": len(row["deprecated_leaked_into_default"]),
-                }
-                for row in verify["reports"]
-            ],
-            "parity_qingyun": {"cli": cli_ids, "mcp": mcp_ids},
-        }
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
-        return 0 if payload["ok"] else 1
+        reports: list[dict[str, Any]] = []
+        for query in args.query:
+            cli = service.search(query, include_files=False, limit=5)
+            mcp = dispatch_tool(service, "memory_search", {"query": query, "limit": 5})
+            cli_ids = [item["fact_id"] for item in cli["facts"]]
+            mcp_ids = [item["fact_id"] for item in mcp["structuredContent"]["facts"]]
+            if cli_ids != mcp_ids:
+                gaps.append(f"CLI/MCP search mismatch for query {query!r}")
+            reports.append({"query": query, "cli": cli_ids, "mcp": mcp_ids})
+        payload.update(
+            {
+                "ok": not gaps,
+                "gaps": gaps,
+                "live": True,
+                "read_only": True,
+                "schema": service.store.schema_version,
+                "counts": service.store.counts(),
+                "parity": reports,
+            }
+        )
     finally:
         service.close()
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if payload["ok"] else 1
 
 
 if __name__ == "__main__":

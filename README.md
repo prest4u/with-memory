@@ -2,88 +2,88 @@
 
 # With.
 
-Things that stay with you.
-
 With is a persistent memory layer for your harness.
 
-The source of truth is an owned SQLite file on your machine. People look at an Obsidian vault. Every tool talks to the same CLI or stdio MCP. Facts are invalidated, not deleted.
+SQLite is the only source of truth. The CLI, local interactive review terminal, and stdio MCP are the product; Obsidian is an optional projection. The command remains `eric-memory` for v1 compatibility.
 
-The product is **With.** The command is still `eric-memory`, so existing installs keep working.
+> Release status: this checkout is still version `0.1.0`, not a signed `1.0.0` GA release. The production kernel and release gates are implemented, but GA remains blocked until the embedded release trust root, four native signed artifacts, real six-harness evidence, and independent reviews exist for one frozen commit.
 
-## Stay
-
-A current fact is `active`. A retired fact is `deprecated` plus `superseded_by`. Default search does not treat history as current. Nothing is erased to make a new present.
-
-That is the whole philosophy, in one line: leave what was true, and write what is true now.
-
-## Architecture
+## Trust model
 
 ```mermaid
-flowchart TB
-  quest[Install_or_daily_quest]
-  cli[CLI_and_MCP]
-  store[Owned_SQLite]
-  vault[Obsidian_projection]
-  harness[Registered_harness]
-  quest --> cli
-  harness --> cli
-  cli --> store
-  store --> vault
+flowchart LR
+  H[Harness principal] -->|search active facts| M[stdio MCP]
+  H -->|submit candidate| M
+  M --> D[(SQLite truth)]
+  A[Local interactive admin] -->|review / supersede / purge| C[eric-memory CLI]
+  C --> D
+  D -->|optional atomic projection| O[Obsidian]
 ```
 
-No app. No cloud. No login daemon. No admin rights. Zero third-party runtime packages. Python 3.10+ is enough.
+- A normal harness can search authorized scopes and submit candidates. It cannot silently create active facts.
+- A local administrator accepts or rejects candidates with `review`. Fact bodies are immutable; evolution creates a new fact and deprecates the old one.
+- Credentials, private keys, high-entropy tokens, cookies, long source text, and suspected minor-performance records are rejected or redacted before persistence.
+- The security boundary is the OS account. Software with arbitrary shell access as the same account is effectively a local administrator.
+- No command uses the network except an explicit `update check` or `update apply`. There is no telemetry or daemon.
 
-## Two tiers
+## Source installation
 
-| Tier | Who | How |
-| --- | --- | --- |
-| Simple | Anyone installing on their own machine | Paste [`quests/en/install.md`](quests/en/install.md) into the AI you already use. Then open the Obsidian home note. Run the daily quest when you want the vault refreshed. |
-| Full | Maintainers | The same, plus a read-only Holograph import, tests, and adapters. |
-
-Guides: [Introduction](docs/en/introduction.md) · [Simple](docs/en/simple.md) · [Full](docs/en/full.md) · [CLI and MCP](docs/en/cli-mcp.md) · [Windows / Linux](docs/en/windows-linux.md)
-
-Chinese copies live next to them in [`docs/`](docs/) and [`quests/`](quests/).
-
-## Install
+Python 3.10+ is required. Runtime dependencies are locked in [`pyproject.toml`](pyproject.toml).
 
 ```bash
-python3 -m unittest discover -s tests -q
-python3 scripts/repo_check.py
-python3 bin/eric-memory --version
-python3 bin/eric-memory --data-dir "$HOME/eric-memory-data" init --tier simple
-python3 bin/eric-memory --data-dir "$HOME/eric-memory-data" status
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade "pip==26.2.1"
+.venv/bin/python -m pip install .
+.venv/bin/eric-memory --data-dir "$HOME/eric-memory-data" init --no-obsidian
+.venv/bin/eric-memory --data-dir "$HOME/eric-memory-data" doctor
 ```
 
-On Windows use `py -3` and `%USERPROFILE%\eric-memory-data`. Expand `~` once at init. After that, only absolute paths.
+Windows uses `.venv\Scripts\python.exe` and `.venv\Scripts\eric-memory.exe`. Expand the data path once; persisted paths must be absolute. Installation does not require administrator rights or modify `PATH` automatically.
 
-Or skip the terminal: give [`quests/en/install.md`](quests/en/install.md) to your harness and answer the questionnaire.
+## Trusted memory loop
 
-The data directory never enters Git.
+```bash
+eric-memory --data-dir "$HOME/eric-memory-data" search "current project" --scope user
+eric-memory --data-dir "$HOME/eric-memory-data" candidate add \
+  --content "The current project entry is /absolute/path; review before activation." \
+  --entities "With" --scope user
+eric-memory --data-dir "$HOME/eric-memory-data" review
+eric-memory --data-dir "$HOME/eric-memory-data" backup create
+```
 
-## Official surface
+An MCP configuration must identify its harness:
 
-| Action | CLI | MCP |
-| --- | --- | --- |
-| Initialize | `init` | (once, from the install quest) |
-| Status | `status` | `memory_status` |
-| Write | `add` | `memory_add` |
-| Search | `search` | `memory_search` |
-| Invalidate | `deprecate` | `memory_deprecate` |
-| Sync | `sync` | `memory_sync` |
-| Import | `import holograph --source …` | `memory_import` |
-| Index a folder | `index-files` | `memory_index_files` |
-| Register a tool | `harness add` | `memory_harness_add` |
-| List registered tools | `harness list` | `memory_harness_list` |
+```text
+eric-memory --data-dir /ABS/eric-memory-data mcp --principal cursor
+```
 
-Do not `INSERT` into `memory.db` by hand. The contract is [skills/严格技能.md](skills/严格技能.md). A Cursor template is [.cursor/mcp.json.example](.cursor/mcp.json.example).
+Omitting `--principal` selects the migration-safe `legacy` identity: status and search only. Register a principal with `harness add`; default grants are least-privilege. Approve file sources only from the local interactive CLI.
 
-## What v1 will not do
+## Guarantees and boundaries
 
-- Use Mem0, Graphiti, Cognee, or Supermemory as the kernel
-- Treat Obsidian as the source of truth
-- Scan the whole disk in silence
-- Treat a vendor leaderboard as acceptance
-- Ship a client zip, a cloud, or a background service
+- Schema v2 uses stable UUIDs while preserving integer fact IDs and existing command/JSON names.
+- Non-`init` commands never create a missing database; read commands open SQLite read-only.
+- Migration is side-by-side and atomically replaces the database only after validation and backup.
+- Search filters ACL, scope, and status before versioned hybrid ranking.
+- Backups, restore, purge, source consent/revocation, operation IDs, redacted support bundles, and atomic projection are built in.
+- `--tier simple|full` remains accepted during v1 but is ignored with a deprecation warning; there is one unified mode.
+
+## Documentation
+
+- [CLI and MCP](docs/en/cli-mcp.md)
+- [Install and upgrade](docs/en/install-upgrade.md)
+- [Migration, backup, and restore](docs/en/migration-backup-restore.md)
+- [Privacy and threat model](docs/en/privacy-threat-model.md)
+- [Emergency purge](docs/en/purge.md)
+- [Troubleshooting and support](docs/en/troubleshooting-support.md)
+- [Release process and GA gates](docs/en/release-process.md)
+- [Architecture](docs/en/architecture.md)
+
+The mandatory harness contract is [skills/严格技能.md](skills/严格技能.md). Do not edit `memory.db` directly or walk unapproved directories.
+
+## Non-goals for v1
+
+Cloud sync, accounts, multi-user collaboration, HTTP MCP, a desktop app, background services, local models, and vector databases are deliberately out of scope.
 
 ## License
 

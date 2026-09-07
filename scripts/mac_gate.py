@@ -1,103 +1,131 @@
 #!/usr/bin/env python3
-"""Mac acceptance gate for the first edition. Does not touch Holograph except as a read-only import."""
+"""Destructive acceptance gate restricted to a temporary database or an explicit copy."""
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
+import tempfile
+import uuid
 from pathlib import Path
+from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
-from eric_memory.mcp_server import handle_rpc
-from eric_memory.paths import expand_once
+from eric_memory.mcp_server import dispatch_tool
+from eric_memory.paths import require_absolute
 from eric_memory.service import MemoryService
 
-HOLOGRAPH = Path("/Users/eric/.hermes/profiles/eric/memory_store.db")
-DATA = Path("/Users/eric/eric-memory-data")
+ROOT = Path(__file__).resolve().parents[1]
 INDEX_SAMPLE = ROOT / "vault-template"
 
 
-def _rpc(service: MemoryService, name: str, arguments: dict | None = None) -> dict:
-    reply = handle_rpc(
-        service,
-        {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": arguments or {}},
-        },
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--data-dir",
+        help="absolute path to a disposable data directory; omitted means a new temporary directory",
     )
-    assert reply is not None
-    result = reply["result"]
-    if result.get("isError"):
-        raise RuntimeError(result["content"][0]["text"])
-    return result["structuredContent"]
+    parser.add_argument(
+        "--allow-existing-copy",
+        action="store_true",
+        help="confirm that an existing memory.db is a disposable copy, never the live database",
+    )
+    parser.add_argument(
+        "--holograph-copy",
+        help="optional absolute path to a Holograph database copy imported read-only",
+    )
+    return parser
+
+
+def _open_gate_service(data_dir: Path, *, allow_existing_copy: bool) -> MemoryService:
+    database = data_dir / "memory.db"
+    if database.exists():
+        if not allow_existing_copy:
+            raise SystemExit("existing memory.db refused; pass --allow-existing-copy only for a disposable copy")
+        return MemoryService(data_dir)
+    service = MemoryService.for_init(data_dir)
+    service.init(data_dir=data_dir, tier="full", write_repo_pointer=False)
+    return service
+
+
+def _run(data_dir: Path, args: argparse.Namespace) -> dict[str, Any]:
+    service = _open_gate_service(data_dir, allow_existing_copy=args.allow_existing_copy)
+    harness: MemoryService | None = None
+    try:
+        imported: dict[str, Any] | None = None
+        if args.holograph_copy:
+            source = require_absolute(args.holograph_copy, name="holograph copy")
+            imported = service.import_holograph(str(source), actor="mac-gate")
+
+        service.harness_add(
+            "gate-harness",
+            display_name="Disposable acceptance harness",
+            session_root=str(INDEX_SAMPLE.resolve()),
+            mcp_mounted=True,
+            notes="Synthetic acceptance only",
+        )
+        service.source_approve(str(INDEX_SAMPLE.resolve()), harness_key="gate-harness")
+        service.harness_add("gate-harness", harvest_ok=True)
+        source = next(item for item in service.source_list()["sources"] if item["harness_key"] == "gate-harness")
+        harness = MemoryService(data_dir, principal="gate-harness")
+        submitted = dispatch_tool(
+            harness,
+            "memory_candidate_add",
+            {
+                "content": "Acceptance confirms candidate review and scoped retrieval work together.",
+                "submission_uid": str(uuid.uuid4()),
+                "entities": ["With acceptance"],
+                "source_uid": source["source_uid"],
+                "source_locator": "记忆首页.md",
+            },
+        )
+        if submitted.get("isError"):
+            raise SystemExit(submitted["structuredContent"]["error"])
+        candidate_uid = submitted["structuredContent"]["candidate"]["candidate_uid"]
+        accepted = service.review_accept(candidate_uid)
+        searched = dispatch_tool(harness, "memory_search", {"query": "acceptance"})
+        denied = dispatch_tool(
+            harness,
+            "memory_add",
+            {"content": "This direct active write must never be accepted."},
+        )
+        backup = service.backup_create(kind="acceptance")
+        verified = service.backup_verify(backup["backup"]["path"])
+        doctor = service.doctor()
+        service.sync(actor="mac-gate")
+        found_ids = [item["fact_id"] for item in searched["structuredContent"]["facts"]]
+        if accepted["fact"]["fact_id"] not in found_ids:
+            raise SystemExit("accepted candidate was not retrieved")
+        if not denied.get("isError") or denied["structuredContent"]["error"]["code"] != "PERMISSION_REQUIRED":
+            raise SystemExit("ordinary harness unexpectedly wrote an active fact")
+        if not verified["ok"]:
+            raise SystemExit("acceptance backup failed verification")
+        return {
+            "ok": True,
+            "synthetic": True,
+            "data_dir": str(data_dir),
+            "import": imported,
+            "accepted_fact_id": accepted["fact"]["fact_id"],
+            "search_ids": found_ids,
+            "direct_write_error": denied["structuredContent"]["error"]["code"],
+            "backup_verified": True,
+            "doctor_ok": doctor["ok"],
+        }
+    finally:
+        if harness is not None:
+            harness.close()
+        service.close()
 
 
 def main() -> int:
-    data_dir = expand_once(DATA, name="gate data dir")
-    holograph = expand_once(HOLOGRAPH, name="holograph db")
-    service = MemoryService(data_dir)
-    try:
-        init = service.init(data_dir=data_dir, tier="full", folders=[str(INDEX_SAMPLE)])
-        imported = service.import_holograph(str(holograph))
-        service.harness_add("cursor", mcp_mounted=True, notes="Mac gate: CLI / this Cursor session")
-        service.harness_add("hermes", mcp_mounted=True, notes="Mac gate: MCP as second harness")
-        cli_add = service.add(
-            "Mac 验收：Cursor CLI 写入一条现行指针，路径在 /Users/eric/Documents/eric-memory。",
-            entities=["验收门"],
-            category="workflow",
-            actor="cursor",
-        )
-        mcp_add = _rpc(
-            service,
-            "memory_add",
-            {
-                "content": "Mac 验收：Hermes/MCP 写入第二条指针，随后作废 Cursor 那条测试句。",
-                "entities": ["验收门"],
-                "supersedes": cli_add["fact"]["fact_id"],
-            },
-        )
-        search = _rpc(service, "memory_search", {"query": "验收门"})
-        verify = service.verify(["example-name", "青云", "验收门"])
-        indexed = service.index_files(str(INDEX_SAMPLE))
-        synced = service.sync(actor="mac-gate")
-        vault = Path(synced["vault_dir"])
-        home = (vault / "记忆首页.md").read_text(encoding="utf-8")
-        checks = {
-            "init": init,
-            "import_added": imported["added"],
-            "import_skipped": imported["skipped"],
-            "counts": service.store.counts(),
-            "verify": verify,
-            "mcp_search_ids": [f["fact_id"] for f in search["facts"]],
-            "mcp_current": mcp_add["fact"]["fact_id"],
-            "indexed": indexed,
-            "vault_home_has_sections": all(
-                token in home for token in ("现行", "已过期", "已接工具", "资料夹")
-            ),
-            "harnesses": [h["key"] for h in service.harness_list()["harnesses"]],
-        }
-        print(json.dumps(checks, ensure_ascii=False, indent=2))
-        if imported["added"] + imported["skipped"] < 500:
-            raise SystemExit("import did not reach ~565 holograph facts")
-        if not verify["ok"]:
-            raise SystemExit("deprecated facts leaked into default search")
-        if mcp_add["fact"]["fact_id"] not in checks["mcp_search_ids"]:
-            raise SystemExit("second harness could not see its own write")
-        if cli_add["fact"]["fact_id"] in checks["mcp_search_ids"]:
-            if any(f["fact_id"] == cli_add["fact"]["fact_id"] and f["status"] == "active" for f in search["facts"]):
-                raise SystemExit("superseded CLI fact still active in default search")
-        if not checks["vault_home_has_sections"]:
-            raise SystemExit("Obsidian home missing required sections")
-        print("MAC_GATE_OK")
-        return 0
-    finally:
-        service.close()
+    args = _parser().parse_args()
+    if args.data_dir:
+        data_dir = require_absolute(args.data_dir, name="gate data dir")
+        result = _run(data_dir, args)
+    else:
+        with tempfile.TemporaryDirectory(prefix="with-mac-gate-") as temporary:
+            result = _run(Path(temporary).resolve() / "data", args)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
 
 
 if __name__ == "__main__":

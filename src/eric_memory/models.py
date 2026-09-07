@@ -23,6 +23,11 @@ class Fact:
     created_at: str
     updated_at: str
     entities: list[str] = field(default_factory=list)
+    fact_uid: str = ""
+    score: float = 0.0
+    matched_by: list[str] = field(default_factory=list)
+    scope: dict[str, str] = field(default_factory=lambda: {"kind": "user", "key": ""})
+    source_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return _public(asdict(self))
@@ -78,6 +83,34 @@ class AuditEvent:
     actor: str
     detail: str
     created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return _public(asdict(self))
+
+
+@dataclass
+class Candidate:
+    candidate_id: int
+    candidate_uid: str
+    submission_uid: str
+    principal_key: str
+    content: str | None
+    content_summary: str
+    category: str
+    entities: list[str]
+    as_of: str
+    confidence: float
+    status: str
+    scope: dict[str, str]
+    source_uid: str | None
+    source_locator: str
+    manual_input: bool
+    policy_codes: list[str]
+    reason: str
+    accepted_fact_id: int | None
+    created_at: str
+    updated_at: str
+    expires_at: str
 
     def to_dict(self) -> dict[str, Any]:
         return _public(asdict(self))

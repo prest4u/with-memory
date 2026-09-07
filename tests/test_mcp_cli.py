@@ -4,11 +4,10 @@ import io
 import json
 import subprocess
 import sys
-from pathlib import Path
 
-from tests.helpers import ROOT, TempServiceTest
 from eric_memory import mcp_server
 from eric_memory.mcp_server import _read_message, handle_rpc
+from tests.helpers import ROOT, TempServiceTest
 
 
 class McpCliTests(TempServiceTest):

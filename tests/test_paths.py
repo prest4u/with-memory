@@ -4,9 +4,8 @@ import sys
 import unittest
 from pathlib import Path
 
-from tests.helpers import SRC
-
 from eric_memory.paths import PathError, require_absolute
+from tests.helpers import SRC
 
 
 class PathTests(unittest.TestCase):

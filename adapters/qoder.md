@@ -14,7 +14,9 @@ Write this into the Qoder user `mcp.json`:
       "args": [
         "/ABS/with-memory/mcp/server.py",
         "--data-dir",
-        "/ABS/eric-memory-data"
+        "/ABS/eric-memory-data",
+        "--principal",
+        "lingma"
       ]
     }
   }
@@ -27,3 +29,5 @@ python3 "$REPO/bin/eric-memory" --data-dir "$DATA" harness add \
 ```
 
 The catalog key is `lingma`.
+
+If the user later supplies a source path, approve it separately with local `source approve PATH --harness lingma`. Qoder submits candidates by default.

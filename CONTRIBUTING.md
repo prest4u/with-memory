@@ -2,23 +2,26 @@
 
 # Contributing
 
-The kernel contract does not move: invalidate, do not delete; write only through CLI or MCP; Obsidian is not the source of truth; do not scan the whole disk by default; do not swap in Mem0, Graphiti, Cognee, or Supermemory.
+The kernel contract does not move: harnesses submit candidates; local review activates facts; invalidate rather than rewrite; write only through CLI/MCP; Obsidian is not truth; never scan an unapproved root.
 
 The product is With. The command stays `eric-memory`.
 
 ## Develop
 
 ```bash
-python3 -m unittest discover -s tests -v
-python3 scripts/repo_check.py
-python3 bin/eric-memory --version
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/ruff check .
+.venv/bin/mypy
+.venv/bin/python scripts/repo_check.py
 ```
 
-Run `python3 scripts/acceptance_check.py` only when a live data directory already exists on the machine. Do not commit `memory.db` or a host `mcp.json`.
+All normal tests use synthetic temporary databases. Never point an acceptance script, migration, or `mac_gate` at a live owner database. Do not commit `memory.db`, a host `mcp.json`, release private keys, or real harness evidence containing paths or content.
 
 ## Writes
 
-Add a test before you change behavior. Regressions go in `tests/test_review_regressions.py`. English is the public default. Keep the Chinese quests in `quests/` for mainland paste-in installs.
+Add a falsifying test with every behavior change. Security, migration, permission, release, and content-policy changes require independent review of the frozen candidate before publication. Preserve v1 integer IDs, command/MCP names, and existing JSON fields unless an explicit migration and recovery path is approved.
 
 ## Docs
 

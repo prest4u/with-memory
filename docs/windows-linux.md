@@ -1,39 +1,33 @@
 [English](en/windows-linux.md) · [中文](windows-linux.md)
 
-# Windows / Linux 步骤
+# Windows 与 Linux
 
-第一版的验收机是 macOS。这两套系统按同样合同安装，不要求你现在实测。
-
-## 共同规则
-
-- Python 3.10+
-- 数据目录必须是绝对路径
-- 不要管理员 / root
-- 不要开机守护
-- `python3` 在 Windows 上写成 `py -3`
+GA 必须在 Windows x86_64 与 Linux x86_64 上分别完成原生 CI、构建和冒烟；macOS 通过不能替代。三类系统使用同一 schema 与 CLI/MCP 契约。
 
 ## Windows
 
-```bat
-py -3 --version
-py -3 C:\ABS\with-memory\bin\eric-memory --data-dir %USERPROFILE%\eric-memory-data init --tier simple
-py -3 C:\ABS\with-memory\bin\eric-memory --data-dir %USERPROFILE%\eric-memory-data status
-py -3 C:\ABS\with-memory\mcp\server.py --data-dir %USERPROFILE%\eric-memory-data
+安装到当前用户虚拟环境或已验证 onedir 包。data/config/database 会设置受保护 ACL，只保留当前用户 SID。`doctor` 校验权限并在可用时报告 BitLocker。
+
+```powershell
+py -3 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade "pip==26.2.1"
+.venv\Scripts\python.exe -m pip install .
+.venv\Scripts\eric-memory.exe --data-dir "$env:USERPROFILE\eric-memory-data" init --no-obsidian
+.venv\Scripts\eric-memory.exe --data-dir "$env:USERPROFILE\eric-memory-data" doctor
 ```
 
-Obsidian 打开 `%USERPROFILE%\eric-memory-data\vault`（或安装时指定的库）。
+MCP 使用同一可执行文件并加 `mcp --principal KEY`。禁止以管理员运行。
 
 ## Linux
 
 ```bash
-python3 --version
-python3 /ABS/with-memory/bin/eric-memory --data-dir "$HOME/eric-memory-data" init --tier simple
-python3 /ABS/with-memory/bin/eric-memory --data-dir "$HOME/eric-memory-data" status
-python3 /ABS/with-memory/mcp/server.py --data-dir "$HOME/eric-memory-data"
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade "pip==26.2.1"
+.venv/bin/python -m pip install .
+.venv/bin/eric-memory --data-dir "$HOME/eric-memory-data" init --no-obsidian
+.venv/bin/eric-memory --data-dir "$HOME/eric-memory-data" doctor
 ```
 
-若发行版只有 `python` 且版本 ≥ 3.10，可以替换命令名，不要因此改用 root。
+目录/文件权限收紧为 `0700`/`0600`；应启用 LUKS 或等价磁盘加密。禁止 root 安装。
 
-## 任务全文
-
-安装 / 每日同步 / 添加工具用 `quests/` 中文全文，或 `quests/en/` 英文全文。把其中的 `python3` 按上面替换即可。
+两个原生产物都必须在干净 OS 用户下通过 init、迁移 plan、candidate/review、search、backup/restore、stdio MCP、support-bundle、启动和卸载验收，才允许 GA。

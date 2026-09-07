@@ -134,7 +134,7 @@ def catalog_by_key() -> dict[str, HarnessPreset]:
     return {item.key: item for item in CATALOG}
 
 
-def catalog_dicts() -> list[dict]:
+def catalog_dicts() -> list[dict[str, str]]:
     return [
         {
             "key": item.key,
