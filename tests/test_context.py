@@ -49,8 +49,17 @@ class ContextTests(TempServiceTest):
         super().tearDown()
 
     def capture(self, content: str, name: str = "output.md") -> dict:
-        (self.root / name).write_text(content, encoding="utf-8")
+        (self.root / name).write_bytes(content.encode("utf-8"))
         return self.client.context.index(self.project, self.source["source_uid"], name)
+
+    def test_exact_read_preserves_lf_crlf_and_cr_source_bytes(self) -> None:
+        for index, newline in enumerate(("\n", "\r\n", "\r")):
+            content = newline.join(("# 中文", "Orchid", ""))
+            with self.subTest(newline=repr(newline)):
+                receipt = self.capture(content, f"newlines-{index}.md")
+                result = self.client.context.read(self.project, receipt["artifact_uid"])
+                self.assertEqual("".join(item["content"] for item in result["results"]), content)
+                self.assertEqual(receipt["sha256"], hashlib.sha256(content.encode("utf-8")).hexdigest())
 
     def test_exact_english_chinese_and_fact_recall_with_byte_budget(self) -> None:
         self.service.add("Launch region is Oregon.", scope="project", project=self.project)

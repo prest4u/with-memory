@@ -17,13 +17,11 @@ from eric_memory.service import MemoryService  # noqa: E402 - source checkout co
 class TempServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
         self.data_dir = Path(self._tmpdir.name) / "data"
         self.service = MemoryService.for_init(self.data_dir)
+        self.addCleanup(lambda: self.service.close())
         self.service.init(data_dir=self.data_dir, tier="full", write_repo_pointer=False)
-
-    def tearDown(self) -> None:
-        self.service.close()
-        self._tmpdir.cleanup()
 
 
 def make_holograph_fixture(path: Path) -> Path:

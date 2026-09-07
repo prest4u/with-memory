@@ -1,4 +1,4 @@
-"""Absolute-path policy: expand HOME once, never pass '~' into runtime IO."""
+"""Absolute-path policy: expand home expressions once before runtime IO."""
 
 from __future__ import annotations
 
@@ -19,12 +19,14 @@ SCHEMA_VERSION = 2
 
 
 class PathError(ValueError):
-    """Raised when a path is missing, relative, or still contains '~'."""
+    """Raised when a path is missing, relative, or has an unexpanded home expression."""
 
 
 def _has_unexpanded_home(raw: str) -> bool:
     folded = raw.casefold()
-    return "~" in raw or "$home" in folded or "${home}" in folded or "%userprofile%" in folded
+    # A home expression starts with '~'; embedded tildes are literal filename
+    # characters, including Windows short names such as RUNNER~1.
+    return raw.startswith("~") or "$home" in folded or "${home}" in folded or "%userprofile%" in folded
 
 
 def require_absolute(path: str | Path, *, name: str) -> Path:
