@@ -70,6 +70,8 @@ Omitting `--principal` selects the migration-safe `legacy` identity: status and 
 
 ## Documentation
 
+- [Optional working context](docs/en/working-context.md): native, project-authorized temporary documents and bounded recall through the existing MCP; no additional runtime dependency.
+
 - [CLI and MCP](docs/en/cli-mcp.md)
 - [Install and upgrade](docs/en/install-upgrade.md)
 - [Migration, backup, and restore](docs/en/migration-backup-restore.md)

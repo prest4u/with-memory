@@ -85,6 +85,74 @@ async def _mcp_smoke(executable: Path, data_dir: Path) -> dict[str, Any]:
     }
 
 
+async def _context_smoke(executable: Path, data_dir: Path) -> dict[str, Any]:
+    from mcp.client.stdio import stdio_client
+
+    from mcp import ClientSession, StdioServerParameters
+
+    capture = data_dir.parent / "context inputs 中文"
+    capture.mkdir()
+    body = "# Orchid\n临时工作资料可检索。\nOrchid retry count is 2.\n"
+    (capture / "build.log").write_text(body, encoding="utf-8")
+    _run(executable, data_dir, "harness", "add", "--key", "frozen-context")
+    source, _ = _run(executable, data_dir, "source", "approve", str(capture), "--harness", "frozen-context")
+    uid = source["source"]["source_uid"]
+    _run(
+        executable, data_dir, "context", "enable", "--project", "frozen", "--source-uid", uid, "--allow-content-storage"
+    )
+    for capability in ("fact:search", "context:read", "context:write"):
+        _run(
+            executable,
+            data_dir,
+            "harness",
+            "grant",
+            "--key",
+            "frozen-context",
+            "--capability",
+            capability,
+            "--scope-kind",
+            "project",
+            "--scope-key",
+            "frozen",
+        )
+    parameters = StdioServerParameters(
+        command=str(executable),
+        args=["--data-dir", str(data_dir), "mcp", "--principal", "frozen-context"],
+    )
+    started = time.perf_counter()
+    async with stdio_client(parameters) as (reader, writer), ClientSession(reader, writer) as session:
+        await session.initialize()
+        initialize_seconds = time.perf_counter() - started
+        names = {tool.name for tool in (await session.list_tools()).tools}
+        if not {"memory_context_index", "memory_recall", "memory_context_read"} <= names:
+            raise AssertionError("frozen context tools are missing")
+        indexed = await session.call_tool(
+            "memory_context_index",
+            {
+                "project": "frozen",
+                "source_uid": uid,
+                "source_locator": "build.log",
+            },
+        )
+        if indexed.is_error:
+            raise AssertionError("frozen context index failed")
+        artifact = indexed.structured_content["artifact_uid"]
+        recalled = await session.call_tool(
+            "memory_recall", {"project": "frozen", "query": "Orchid 临时", "max_bytes": 2048}
+        )
+        if recalled.is_error or "retry count is 2" not in recalled.content[0].text:
+            raise AssertionError("frozen context recall failed")
+        exact = await session.call_tool("memory_context_read", {"project": "frozen", "artifact_uid": artifact})
+        if exact.is_error or "".join(row["content"] for row in exact.structured_content["results"]) != body:
+            raise AssertionError("frozen context exact read failed")
+    async with stdio_client(parameters) as (reader, writer), ClientSession(reader, writer) as session:
+        await session.initialize()
+        resumed = await session.call_tool("memory_context_read", {"project": "frozen", "artifact_uid": artifact})
+        if resumed.is_error or "".join(row["content"] for row in resumed.structured_content["results"]) != body:
+            raise AssertionError("frozen context restart read failed")
+    return {"initialize_seconds": initialize_seconds, "index_recall_exact_read": True, "restart_persistence": True}
+
+
 def _percentile95(values: list[float]) -> float:
     if len(values) < 2:
         return values[0]
@@ -156,11 +224,12 @@ def main() -> int:
         if support.get("facts_included") or support.get("paths_included") or not bundle_path.is_file():
             raise AssertionError("support bundle violated its redaction contract")
         mcp = asyncio.run(_mcp_smoke(executable, data_dir))
+        context = asyncio.run(_context_smoke(executable, data_dir))
 
     gates = {
         "first_startup": first_seconds <= args.max_first_startup,
         "warm_startup_p95": warm_p95 <= args.max_warm_startup,
-        "mcp_initialize": mcp["initialize_seconds"] <= args.max_mcp_initialize,
+        "mcp_initialize": max(mcp["initialize_seconds"], context["initialize_seconds"]) <= args.max_mcp_initialize,
         "frozen_workflow": True,
     }
     result = {
@@ -168,6 +237,7 @@ def main() -> int:
         "first_startup_seconds": first_seconds,
         "warm_startup_p95_seconds": warm_p95,
         "mcp": mcp,
+        "context": context,
         "thresholds": {
             "first_startup_seconds": args.max_first_startup,
             "warm_startup_p95_seconds": args.max_warm_startup,

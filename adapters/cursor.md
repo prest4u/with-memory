@@ -16,6 +16,7 @@ Add a stdio server in Cursor MCP settings:
 {
   "mcpServers": {
     "eric-memory": {
+      "type": "stdio",
       "command": "/ABS/with-memory/.venv/bin/python",
       "args": [
         "/ABS/with-memory/mcp/server.py",
@@ -45,3 +46,5 @@ python3 "$REPO/bin/eric-memory" --data-dir "$DATA" source approve \
 ```
 
 Only use returned changed paths from `harvest begin`. Cloud chats or sessions without a local transcript need an explicit export into an approved source; do not treat the entire Cursor workspace database as a transcript.
+
+Optional [working context](../docs/en/working-context.md) uses this same server. After explicit project grants, restart the client to discover `memory_context_index`, `memory_recall`, and `memory_context_read`. Capture verbose command output in an approved file before indexing; no Cursor hook installation is required for this explicit workflow.

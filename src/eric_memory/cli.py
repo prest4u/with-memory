@@ -118,6 +118,40 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="只读状态")
     sub.add_parser("doctor", help="只读完整健康检查")
 
+    context = sub.add_parser("context", help="项目临时资料与限量检索；需单独启用原文存储")
+    context_sub = context.add_subparsers(dest="context_cmd", required=True)
+    context_enable = context_sub.add_parser("enable", help="本地管理员允许一个来源保存临时原文")
+    context_enable.add_argument("--project", required=True)
+    context_enable.add_argument("--source-uid", required=True)
+    context_enable.add_argument("--ttl-days", type=int, default=7)
+    context_enable.add_argument("--allow-content-storage", action="store_true")
+    context_disable = context_sub.add_parser("disable", help="关闭项目临时存储并删除对应缓存")
+    context_disable.add_argument("--project", required=True)
+    context_disable.add_argument("--source-uid")
+    context_disable.add_argument("--confirm", action="store_true")
+    context_sub.add_parser("clean", help="删除已经过期的临时资料")
+    context_reset = context_sub.add_parser("reset", help="移除所有项目的临时库及启用记录，用于损坏恢复")
+    context_reset.add_argument("--confirm", action="store_true")
+    for name in ("status", "index", "recall", "read"):
+        item = context_sub.add_parser(name)
+        item.add_argument("--project", required=True)
+        item.add_argument("--principal", default="legacy", help="使用已登记并获准的客户端身份")
+        if name == "index":
+            item.add_argument("--source-uid", required=True)
+            item.add_argument("--source-locator", required=True)
+            item.add_argument("--label", default="")
+            item.add_argument("--expected-sha256")
+        if name == "recall":
+            item.add_argument("query")
+            item.add_argument("--limit", type=int, default=6)
+        if name == "read":
+            item.add_argument("artifact_uid")
+            item.add_argument("--start-line", type=int, default=1)
+            item.add_argument("--start-column", type=int, default=1)
+            item.add_argument("--line-count", type=int, default=40)
+        if name in {"read", "recall"}:
+            item.add_argument("--max-bytes", type=int, default=8192)
+
     add = sub.add_parser("add", help="本地管理员直接写入现行事实")
     add.add_argument("--content", required=True)
     add.add_argument("--category", default="general")
@@ -275,6 +309,9 @@ def build_parser() -> argparse.ArgumentParser:
 def _mode_for(args: argparse.Namespace) -> str:
     if args.command == "init":
         return "create"
+    if args.command == "context":
+        # Context writes target only working.sqlite3; the durable DB stays read-only.
+        return "ro"
     if args.command in {"status", "doctor", "search", "history", "export", "verify"}:
         return "ro"
     if args.command == "source" and args.source_cmd == "list":
@@ -327,6 +364,45 @@ def _interactive_review(service: MemoryService, args: argparse.Namespace, as_jso
 
 def _dispatch(service: MemoryService, args: argparse.Namespace) -> int:
     as_json = bool(args.json)
+    if args.command == "context":
+        context = service.context
+        if args.context_cmd == "enable":
+            payload = context.enable(
+                args.project, args.source_uid, ttl_days=args.ttl_days, allow_content_storage=args.allow_content_storage
+            )
+        elif args.context_cmd == "disable":
+            if not args.confirm:
+                raise ConfirmationRequiredError("context disable deletes captured documents; pass --confirm")
+            payload = context.disable(args.project, args.source_uid)
+        elif args.context_cmd == "clean":
+            payload = context.clean()
+        elif args.context_cmd == "reset":
+            if not args.confirm:
+                raise ConfirmationRequiredError("context reset removes all temporary projects; pass --confirm")
+            payload = context.reset()
+        elif args.context_cmd == "status":
+            payload = context.status(args.project)
+        elif args.context_cmd == "index":
+            payload = context.index(
+                args.project,
+                args.source_uid,
+                args.source_locator,
+                label=args.label,
+                expected_sha256=args.expected_sha256,
+            )
+        elif args.context_cmd == "recall":
+            payload = context.recall(args.query, args.project, limit=args.limit, max_bytes=args.max_bytes)
+        else:
+            payload = context.read(
+                args.project,
+                args.artifact_uid,
+                start_line=args.start_line,
+                start_column=args.start_column,
+                line_count=args.line_count,
+                max_bytes=args.max_bytes,
+            )
+        print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
+        return 0
     if args.command == "init":
         payload = service.init(
             data_dir=args.data_dir,
@@ -620,7 +696,7 @@ def main(argv: list[str] | None = None) -> int:
         service = MemoryService(
             getattr(args, "data_dir", None),
             mode=_mode_for(args),  # type: ignore[arg-type]
-            principal="local",
+            principal=getattr(args, "principal", "local"),
         )
         return _dispatch(service, args)
     except (MemoryError, ValueError, KeyError, FileNotFoundError, PermissionError, OSError) as exc:

@@ -69,6 +69,8 @@ jobs:
         run: python scripts/evaluate_search.py
       - name: Synthetic performance smoke
         run: python scripts/benchmark.py --facts 10000 --files 5000
+      - name: Working-context payload and retrieval smoke
+        run: python scripts/context_benchmark.py
       - name: Synthetic end-to-end acceptance
         run: python scripts/mac_gate.py
       - name: Dependency vulnerability audit

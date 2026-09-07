@@ -12,6 +12,8 @@ FACT_WRITE = "fact:write"
 SYNC_RUN = "sync:run"
 FILE_SEARCH = "file:search"
 MANAGE = "manage"
+CONTEXT_READ = "context:read"
+CONTEXT_WRITE = "context:write"
 
 DEFAULT_HARNESS_CAPABILITIES = (
     STATUS_READ,
@@ -31,5 +33,7 @@ ALL_CAPABILITIES = frozenset(
         SYNC_RUN,
         FILE_SEARCH,
         MANAGE,
+        CONTEXT_READ,
+        CONTEXT_WRITE,
     }
 )

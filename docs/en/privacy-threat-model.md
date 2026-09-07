@@ -43,7 +43,9 @@ No MCP parameter bypasses prohibited categories.
 
 Only local interactive `source approve` grants access. It stores a canonical root, include/exclude rules, allowed file types, file-size limit, owning harness, and consent event. OS roots are forbidden; approving the complete home directory requires typing its canonical path. Scans use `lstat`, skip every symlink, and re-check containment.
 
-The database stores paths, hashes, file state, cursors, and candidate references—not file or session bodies. Revocation invalidates open runs, clears file indexes and cursors, and marks derived facts as source-revoked without silently deleting them.
+The durable database stores source paths, hashes, file state, cursors, and candidate references. It does not store file or session bodies. Revocation invalidates open runs, clears file indexes and cursors, and marks derived facts as source-revoked without silently deleting them.
+
+The optional [working-context module](working-context.md) can store approved document bodies in a separate expiring cache only after explicit source-body consent and project capability grants. Every read checks current grants and source consent. This cache is excluded from With.'s managed backups, support bundles, exports and Obsidian projection. Source revocation attempts to remove its cached documents; a cleanup failure reports the committed revocation with a warning and a local reset procedure. Expired content is unreadable immediately and physically cleaned on indexing or local `context clean`. Existing secret and minor-individual-information controls apply. Recognizable raw transcripts are rejected. This feature adds no command executor, network client or automatic transcript ingestion. Restore and emergency purge clear the entire temporary cache before changing the main database.
 
 ## Logs and support
 

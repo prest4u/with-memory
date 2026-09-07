@@ -12,6 +12,7 @@ from typing import Any
 from .backup import BackupManager, atomic_restore_database, validate_restore_schema
 from .catalog import CATALOG, catalog_by_key, catalog_dicts
 from .content_policy import inspect_content, inspect_metadata, validate_pointer
+from .context_service import ContextService
 from .doctor import create_support_bundle, doctor_report
 from .errors import (
     ConfirmationRequiredError,
@@ -78,6 +79,10 @@ class MemoryService:
     def close(self) -> None:
         self.store.close()
 
+    @property
+    def context(self) -> ContextService:
+        return ContextService(self)
+
     def _authorize(self, capability: str, *, scope: ScopeSpec | None = None) -> None:
         if self.store.schema_version < 2:
             if capability in {STATUS_READ, FACT_SEARCH}:
@@ -102,23 +107,6 @@ class MemoryService:
         if fact is None:
             raise NotFoundError(f"fact_id {fact_id} not found")
         self._authorize(capability, scope=validate_scope(fact.scope["kind"], fact.scope["key"]))
-
-    def _expire_candidates_before_read(self) -> None:
-        if self.store.expired_candidate_count():
-            self._before_write()
-            self.store.expire_candidates()
-
-    def _log_after_commit(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        try:
-            self._log(*args, **kwargs)
-        except Exception as exc:  # committed SQLite state remains authoritative
-            return {"operation_log": {"status": "failed", "error_code": type(exc).__name__}}
-        return {}
-
-    def backup_remove(self, paths: list[str]) -> dict[str, Any]:
-        self._require_local_admin()
-        with self.store.maintenance_lock():
-            return {"removed": self.backups.remove_managed(paths)}
 
     def _before_write(self) -> dict[str, Any] | None:
         self._require_local_writable_schema()
@@ -146,6 +134,13 @@ class MemoryService:
             error_code=error_code,
             metadata=metadata,
         )
+
+    def _log_after_commit(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        try:
+            self._log(*args, **kwargs)
+        except Exception as exc:  # committed SQLite state remains authoritative
+            return {"operation_log": {"status": "failed", "error_code": type(exc).__name__}}
+        return {}
 
     @staticmethod
     def _validate_safe_metadata(*values: str, source_locator: str = "") -> None:
@@ -567,6 +562,11 @@ class MemoryService:
             "related_active_facts": related["facts"],
         }
 
+    def _expire_candidates_before_read(self) -> None:
+        if self.store.expired_candidate_count():
+            self._before_write()
+            self.store.expire_candidates()
+
     def review_accept(self, candidate_uid: str, *, supersedes: list[int] | None = None) -> dict[str, Any]:
         self._require_local_admin()
         for fact_id in supersedes or []:
@@ -739,7 +739,18 @@ class MemoryService:
         self._require_local_admin()
         self._before_write()
         source = self.store.revoke_source(source_uid, actor=self.principal_key)
-        return {"source": source, "committed": True}
+        payload: dict[str, Any] = {"source": source, "committed": True}
+        try:
+            self.context.store.forget_source(source_uid)
+            payload["context_cleanup"] = "complete"
+        except Exception as exc:  # Revocation must take effect even if disposable storage is damaged.
+            payload["context_cleanup"] = "pending"
+            payload["warning"] = {
+                "code": "CONTEXT_CLEANUP_PENDING",
+                "error_code": type(exc).__name__,
+                "message": "Source access is revoked. Retry source revoke, or use local context reset --confirm.",
+            }
+        return payload
 
     # Legacy folder/harness surfaces --------------------------------------
     def add_folder(self, path: str, *, label: str = "") -> dict[str, Any]:
@@ -971,6 +982,11 @@ class MemoryService:
         self._require_local_admin()
         return self.backups.prune()
 
+    def backup_remove(self, paths: list[str]) -> dict[str, Any]:
+        self._require_local_admin()
+        with self.store.maintenance_lock():
+            return {"removed": self.backups.remove_managed(paths)}
+
     def restore(self, backup_path: str) -> dict[str, Any]:
         self._require_local_admin()
         source = expand_once(backup_path, name="backup")
@@ -983,9 +999,18 @@ class MemoryService:
             # Hold the writer lock from the recovery snapshot through replacement;
             # otherwise a concurrent committed write could be lost from both.
             safety = self.backups.create(self.store, kind="pre-restore")
+            # Restored consent revisions must never revive invalidated context.
+            context_reset: dict[str, Any] = {}
+            context_store = self.context.store
+
+            def reset_context() -> None:
+                context_reset.update(context_store.reset())
+
             self.store.close()
             try:
-                restored = atomic_restore_database(db_path, source, expected_sha256=verified["sha256"])
+                restored = atomic_restore_database(
+                    db_path, source, expected_sha256=verified["sha256"], before_replace=reset_context
+                )
             finally:
                 self.store = MemoryStore(db_path, mode="rw-existing")
         configuration_error = ""
@@ -1002,6 +1027,7 @@ class MemoryService:
             "configuration": "pending" if configuration_error else "saved",
             "configuration_error": configuration_error,
             "safety_snapshot": safety,
+            "context_reset": context_reset,
         }
         if self.store.schema_version >= 2:
             payload = self._project_after_commit(payload, operation_uid)
@@ -1078,6 +1104,10 @@ class MemoryService:
             "source_links": int(source_rows),
             "managed_backups_to_remove": backups,
             "projection": self.store.projection_state(),
+            "working_context": {
+                "present": self.context.store.path.exists(),
+                "action": "remove all temporary documents and enabled-source settings before purge",
+            },
             "uncontrolled_copies": [
                 "Time Machine and system snapshots",
                 "third-party Obsidian synchronization",
@@ -1098,6 +1128,7 @@ class MemoryService:
                 atomic_write_text(projection_probe, "purge preflight\n", mode=0o600)
                 projection_probe.unlink()
             mandatory = self.backups.create(self.store, kind="pre-purge")
+            context_reset = self.context.store.reset()
             affected = list(plan["managed_backups_to_remove"])
             affected.append(str(mandatory["path"]))
             fact_uid = str(plan["confirmation"])
@@ -1132,6 +1163,7 @@ class MemoryService:
                     "purge_cleanup": "pending" if remaining or clean is None else "complete",
                     "remaining_managed_backups": remaining,
                     "cleanup_error": cleanup_error,
+                    "context_reset": context_reset,
                     "warning": {
                         "code": "UNCONTROLLED_COPIES_REMAIN",
                         "message": (

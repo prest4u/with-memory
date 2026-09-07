@@ -165,6 +165,13 @@ class MigrationTests(unittest.TestCase):
 
 
 class BackupRestorePurgeTests(TempServiceTest):
+    def test_backup_latest_uses_creation_time_instead_of_kind_prefix(self) -> None:
+        older = self.service.backup_create(kind="z-old")["backup"]
+        newer = self.service.backup_create(kind="a-new")["backup"]
+        items = self.service.backup_list()["backups"]
+        self.assertEqual(items[0]["path"], newer["path"])
+        self.assertNotEqual(items[0]["path"], older["path"])
+
     def test_restore_accepts_the_original_v1_release_schema(self) -> None:
         self.service.add("This v2 fact is replaced by the original v1 backup.")
         source = self.data_dir / "original-v1.sqlite3"
@@ -309,12 +316,21 @@ class BackupRestorePurgeTests(TempServiceTest):
     def test_purge_removes_database_projection_and_all_managed_backup_copies(self) -> None:
         content = "PURGE-CANARY-2f9b48e6 must leave every With-managed copy."
         fact = self.service.add(content)["fact"]
+        capture_root = self.data_dir.parent / "purge-input"
+        capture_root.mkdir()
+        (capture_root / "notes.txt").write_text(content)
+        source = self.service.source_approve(str(capture_root))["source"]
+        self.service.context.enable("purge-test", source["source_uid"], allow_content_storage=True)
+        self.service.context.index("purge-test", source["source_uid"], "notes.txt")
         containing = self.service.backup_create()["backup"]
         plan = self.service.purge_plan(fact["fact_id"])
         self.assertIn(containing["path"], plan["managed_backups_to_remove"])
+        self.assertTrue(plan["working_context"]["present"])
         result = self.service.purge(fact["fact_id"], confirmation=fact["fact_uid"])
         self.assertIsNone(self.service.store.get_fact(fact["fact_id"]))
         self.assertTrue(result["integrity"]["ok"])
+        self.assertEqual(result["context_reset"]["removed_files"], 1)
+        self.assertFalse(self.service.context.store.path.exists())
         self.assertTrue(Path(result["clean_backup"]["path"]).is_file())
         self.assertFalse(Path(containing["path"]).exists())
         tombstone = self.service.store.connection.execute(

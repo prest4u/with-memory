@@ -30,6 +30,8 @@ A normal harness can only produce a pending candidate from an assigned source. C
 
 ## Retrieval
 
+Optional [working context](working-context.md) is implemented by `ContextService` and `ContextStore`, exposed through the same CLI/MCP. A library-bound `context/working.sqlite3` stores explicitly enabled project sources and expiring document snapshots; schema-v2 durable facts require no migration. `context:read` and `context:write` are opt-in project grants. The existing `memory_search` behavior is preserved, while `memory_recall` returns bounded, labeled project facts and document excerpts. Readers recheck source consent and project grants; writers additionally require ownership of the approved source. No subprocess execution or automatic fact promotion is added.
+
 ACL, scope, and status are applied before ranking. Candidate sets come from exact entity, aliases, CJK unigram/bigram plus Latin tokens, FTS5/BM25, and escaped literal LIKE. Versioned weighted reciprocal-rank fusion combines every channel. Entity hits never short-circuit the other channels. Deprecated rows require explicit history permission.
 
 ## Source indexing

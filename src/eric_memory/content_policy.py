@@ -41,6 +41,30 @@ SESSION_UUID_RE = re.compile(
     r"(?<![0-9a-f])[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![0-9a-f])",
     re.I,
 )
+CONVERSATION_ROLE = r"(?:system|user|assistant|human|ai|developer|用户|助手|人类|模型)"
+STRUCTURED_ROLE_RE = re.compile(
+    rf"\\?[\"'](?:role|speaker|from)\\?[\"']\s*:\s*\\?[\"']{CONVERSATION_ROLE}\\?[\"']"
+    rf"|\b(?:role|speaker)\s*=\s*[\"']{CONVERSATION_ROLE}[\"']"
+    rf"|(?m:^\s*-?\s*role\s*:\s*{CONVERSATION_ROLE}\s*$)",
+    re.I,
+)
+PLAIN_ROLE_RE = re.compile(
+    rf"^\s*(?:\#{{1,6}}\s*)?(?:\*\*)?({CONVERSATION_ROLE})(?:\*\*)?\s*[:：](?:\*\*)?",
+    re.I | re.M,
+)
+ROLE_HEADING_RE = re.compile(rf"^\s*\#{{1,6}}\s+({CONVERSATION_ROLE})\s*$", re.I | re.M)
+XML_ROLE_RE = re.compile(rf"<({CONVERSATION_ROLE})(?:\s[^>]*|)>", re.I)
+
+
+def _looks_like_transcript(content: str) -> bool:
+    if RAW_ORIGINAL_RE.search(content) or STRUCTURED_ROLE_RE.search(content):
+        return True
+    if any(marker in content for marker in ("<|im_start|>", "<|start_header_id|>")):
+        return True
+    # Repeated speaker turns distinguish conversation exports from an isolated
+    # role label in an otherwise ordinary document. Detection is conservative,
+    # not a guarantee that arbitrary sensitive prose can be identified.
+    return any(len(pattern.findall(content)) >= 2 for pattern in (PLAIN_ROLE_RE, ROLE_HEADING_RE, XML_ROLE_RE))
 
 
 @dataclass(frozen=True)
@@ -75,6 +99,17 @@ def inspect_content(content: str) -> PolicyDecision:
         suspicious.append("possible_raw_original")
     if suspicious:
         return PolicyDecision("quarantine", tuple(sorted(set(suspicious))))
+    return PolicyDecision("allow", ())
+
+
+def inspect_context_content(content: str) -> PolicyDecision:
+    """Opt-in temporary documents may be long; prohibited content stays blocked."""
+    decision = inspect_content(content)
+    codes = set(decision.codes) - {"possible_raw_original"}
+    if _looks_like_transcript(content):
+        codes.add("raw_transcript")
+    if codes:
+        return PolicyDecision("reject", tuple(sorted(codes)))
     return PolicyDecision("allow", ())
 
 

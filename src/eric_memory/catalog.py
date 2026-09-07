@@ -18,7 +18,7 @@ CATALOG: list[HarnessPreset] = [
     HarnessPreset(
         "kimi",
         "Kimi Code",
-        "~/.kimi/sessions",
+        "~/.kimi-code/sessions",
         "会话常在 wire.jsonl / context.jsonl。安装时把 ~ 展开成绝对路径后再登记。",
         "C 端新购曾暂停，以用户本机是否已装为准。",
     ),

@@ -206,6 +206,12 @@ class BackupManager:
                 items.append({**data, "path": str(backup)})
             except (OSError, ValueError, KeyError, TypeError):
                 continue
+
+        def creation_order(item: dict[str, Any]) -> tuple[str, str]:
+            stamp = re.search(r"-(\d{8}T\d{12}Z)-", str(item.get("filename", "")))
+            return str(item.get("created_at", "")), stamp.group(1) if stamp else ""
+
+        items.sort(key=creation_order, reverse=True)
         return items
 
     def verify(self, backup_path: str | Path) -> dict[str, Any]:

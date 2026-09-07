@@ -2,6 +2,8 @@
 
 # With.
 
+With. 新增可选的[工作上下文模块](docs/工作上下文.md)：按项目暂存获准资料，通过现有 CLI／MCP 返回相关片段。需要单独启用原文存储，不增加运行时依赖。
+
 With 是给 harness 使用的本地持久记忆层。
 
 SQLite 是唯一真相源。CLI、本地交互式审阅终端和 stdio MCP 构成产品；Obsidian 只是可选投影。为保证 v1 兼容，命令继续叫 `eric-memory`。

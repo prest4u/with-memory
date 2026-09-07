@@ -37,6 +37,11 @@ eric-memory --data-dir /ABS/data restore --from /ABS/backup.sqlite3
 
 Restore verifies the input, locks the database, snapshots the current state, restores through a temporary path, atomically activates it, hardens permissions, and runs integrity checks. The local terminal requires typing `RESTORE`. MCP does not expose restore.
 
+An optional working-context cache is excluded from backups. Restore removes that
+whole cache and its source-enable settings before changing the main database, so
+older consent records cannot reactivate invalidated documents. If cache cleanup
+fails, restore stops. Enable selected temporary sources again after recovery.
+
 ## Exact rollback boundary
 
 Rollback is lossless only before the first v2 write. After a v2 write, With. first exports the v2-only increment, displays potential loss, and requires typing `ROLLBACK`:

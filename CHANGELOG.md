@@ -2,6 +2,10 @@
 
 ## Unreleased — production hardening
 
+- Optional native working context: separate expiring SQLite document cache, explicit project/source consent, bounded bilingual recall and exact line/column paging through the existing CLI and stdio MCP; no new runtime dependency or fact-schema migration
+- Context permissions preserve existing default tool discovery; explicit project read grants allow sharing across harnesses while source ownership continues to control capture
+- Synthetic context regression and official SDK round-trip tests cover capture, expiry, source changes, byte budgets, concurrency and multiple principal identities; real client/OS acceptance remains a separate release requirement
+
 - Schema v2: stable library/device/object UIDs, structured scopes, principals/grants, sources/scans, separate candidates, supersession DAGs, and append-only redacted events while preserving integer fact IDs
 - Explicit SQLite open modes, atomic write transactions, side-by-side migration, verified backups/restore/rollback, opportunity-based rotation, and interactive purge
 - Candidate-first harness policy, source consent/revocation, pre-persistence content controls, idempotent submissions, local interactive review, and ACL-filtered MCP discovery

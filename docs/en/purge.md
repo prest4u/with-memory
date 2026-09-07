@@ -25,11 +25,17 @@ The command displays the fact UID, sources, projection impact, and managed backu
 - linked source locators and candidate references that could preserve the target text;
 - With.-owned Obsidian projection pages, followed by a clean regeneration;
 - every With.-managed automatic backup containing the target;
+- the entire optional working-context cache and its source-enable settings;
 - SQLite WAL remnants through secure delete, checkpoint and VACUUM.
 
 Afterward it runs integrity checks and creates a new clean backup. The only retained tombstone identifies that a purge occurred; it contains no body or content hash.
 
 If projection preflight fails, database deletion does not begin. If regeneration fails after database purge, With. removes all With.-owned projection pages rather than leaving stale content.
+
+The preview reports whether a working-context cache exists. Its removal happens
+before the fact is purged; failure prevents the main-database deletion. Re-enable
+selected temporary sources afterward. Original source files remain outside this
+cleanup and can still contain the target text.
 
 ## What With. cannot remove
 

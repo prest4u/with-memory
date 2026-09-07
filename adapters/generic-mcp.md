@@ -29,3 +29,5 @@ eric-memory --data-dir /ABS/eric-memory-data source approve /ABS/SOURCE --harnes
 ```
 
 harness 默认提交 `memory_candidate_add`，不能直接写 active。
+
+可选[工作上下文](../docs/工作上下文.md)也通过这条 stdio 服务使用。开启后按项目显式授予 `context:read`／`context:write`；无需第二个服务器。临时资料跨客户端共享需要对应项目读取授权。没有 MCP 但有本地命令工具时，使用 `eric-memory context ... --principal HARNESS_KEY`。

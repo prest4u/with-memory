@@ -43,6 +43,8 @@ python3 "$REPO/bin/eric-memory" --data-dir "$DATA" source approve \
 
 If this machine still has leftover `$HOME/.kimi/sessions` from a migration, register that separately. Do not write the KimiCU binary.
 
+Optional [working context](../docs/en/working-context.md) uses the existing With. entry. After granting project context permissions, create a new Kimi session so the new tools are registered. Capture output to an approved file and index it explicitly. Source approval for harvesting old sessions does not by itself allow storing those transcripts in the working cache.
+
 Kimi Code project `.kimi-code/mcp.json` entries override the user entry with the same name. Keep `--principal kimi` in both when present. After changing a server, start a new Kimi session and inspect `/mcp`. See the [official Kimi Code MCP documentation](https://moonshotai.github.io/kimi-code/en/customization/mcp).
 
 Mainland note: consumer new purchases were paused. Use whatever is already installed; do not steer people to unofficial channels.
