@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import base64
 import json
+import os
 import subprocess
+import tempfile
+import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from eric_memory.security import harden_private_path, private_path_status
+from eric_memory.security import WINDOWS_READ_ACL, _run_powershell, harden_private_path, private_path_status
 from tests.helpers import TempServiceTest
 
 
@@ -75,3 +79,32 @@ class SecurityPermissionsTests(TempServiceTest):
         ):
             status = private_path_status(target, expected=0o600)
         self.assertFalse(status["ok"])
+
+
+class WindowsInvocationTests(unittest.TestCase):
+    def test_powershell_paths_are_data_and_never_command_text(self) -> None:
+        path = "C:\\private 中文\\$(Write-Output injected) ' quoted"
+        with (
+            patch("eric_memory.security._powershell", return_value="powershell.exe"),
+            patch(
+                "eric_memory.security.subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")
+            ) as runner,
+        ):
+            _run_powershell(WINDOWS_READ_ACL, path)
+        command = runner.call_args.args[0]
+        decoded = base64.b64decode(command[-1]).decode("utf-16-le")
+        self.assertEqual(command[-2], "-EncodedCommand")
+        self.assertNotIn(path, decoded)
+        self.assertEqual(json.loads(runner.call_args.kwargs["env"]["WITH_ACL_ARGUMENTS_JSON"]), [path])
+
+    @unittest.skipUnless(os.name == "nt", "requires a real Windows ACL")
+    def test_real_windows_private_directory_and_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "private 中文 $literal ' quoted"
+            root.mkdir()
+            harden_private_path(root, directory=True)
+            self.assertTrue(private_path_status(root, expected=0o700)["ok"])
+            target = root / "private.txt"
+            target.write_text("synthetic", encoding="utf-8")
+            harden_private_path(target, directory=False)
+            self.assertTrue(private_path_status(target, expected=0o600)["ok"])

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -12,8 +13,8 @@ from typing import Any
 
 WINDOWS_SET_ACL = r"""
 $ErrorActionPreference = 'Stop'
-$target = $args[0]
-$isDirectory = $args[1] -eq 'directory'
+$target = $withArguments[0]
+$isDirectory = $withArguments[1] -eq 'directory'
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 if ($isDirectory) {
   $acl = New-Object System.Security.AccessControl.DirectorySecurity
@@ -38,7 +39,7 @@ Set-Acl -LiteralPath $target -AclObject $acl
 WINDOWS_READ_ACL = r"""
 $ErrorActionPreference = 'Stop'
 $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-$acl = Get-Acl -LiteralPath $args[0]
+$acl = Get-Acl -LiteralPath $withArguments[0]
 $aces = @($acl.Access | ForEach-Object {
   $sid = $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
   [PSCustomObject]@{
@@ -50,7 +51,7 @@ $aces = @($acl.Access | ForEach-Object {
 })
 [PSCustomObject]@{
   current_sid = $identity.User.Value
-  owner_sid = $acl.Owner.Translate([System.Security.Principal.SecurityIdentifier]).Value
+  owner_sid = $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value
   protected = $acl.AreAccessRulesProtected
   aces = $aces
 } | ConvertTo-Json -Compress -Depth 4
@@ -69,8 +70,14 @@ def _powershell() -> str:
 
 
 def _run_powershell(script: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+    # Windows PowerShell treats trailing -Command arguments as script text.
+    # Keep paths in per-process JSON data, separate from the fixed program.
+    prefix = "$withArguments = @(ConvertFrom-Json $env:WITH_ACL_ARGUMENTS_JSON)\n"
+    encoded = base64.b64encode((prefix + script).encode("utf-16-le")).decode("ascii")
+    environment = {**os.environ, "WITH_ACL_ARGUMENTS_JSON": json.dumps(arguments)}
     return subprocess.run(  # noqa: S603 - absolute executable, fixed script, no shell
-        [_powershell(), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, *arguments],
+        [_powershell(), "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+        env=environment,
         capture_output=True,
         text=True,
         timeout=20,

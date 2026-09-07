@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import stat
 import tempfile
 import unittest
@@ -92,7 +93,7 @@ class SignedUpdateTests(unittest.TestCase):
             handler.redirect_request(request, None, 302, "Found", {}, "https://evil.example/payload")
 
     def test_versioned_install_activates_only_a_verified_onedir_payload(self) -> None:
-        executable = zipfile.ZipInfo("with/eric-memory")
+        executable = zipfile.ZipInfo("with/eric-memory.exe" if os.name == "nt" else "with/eric-memory")
         executable.create_system = 3
         executable.external_attr = (stat.S_IFREG | 0o755) << 16
         archive = self._write_zip("valid.zip", [(executable, b"#!/bin/sh\nexit 0\n")])

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -14,7 +15,7 @@ class PathTests(unittest.TestCase):
             require_absolute("~/eric-memory-data", name="data dir")
         with self.assertRaises(PathError):
             require_absolute("eric-memory-data", name="data dir")
-        abs_path = require_absolute(Path("/tmp/eric-memory-test"), name="data dir")
+        abs_path = require_absolute((Path(tempfile.gettempdir()) / "eric-memory-test").resolve(), name="data dir")
         self.assertTrue(abs_path.is_absolute())
         self.assertNotIn("~", str(abs_path))
 
