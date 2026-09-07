@@ -9,7 +9,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from eric_memory.security import WINDOWS_READ_ACL, _run_powershell, harden_private_path, private_path_status
+from eric_memory.security import (
+    WINDOWS_READ_ACL,
+    WINDOWS_SET_ACL,
+    _run_powershell,
+    harden_private_path,
+    private_path_status,
+)
 from tests.helpers import TempServiceTest
 
 
@@ -102,7 +108,8 @@ class WindowsInvocationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "private 中文 $literal ' quoted"
             root.mkdir()
-            harden_private_path(root, directory=True)
+            applied = _run_powershell(WINDOWS_SET_ACL, str(root), "directory")
+            self.assertEqual(applied.returncode, 0, applied.stderr)
             self.assertTrue(private_path_status(root, expected=0o700)["ok"])
             target = root / "private.txt"
             target.write_text("synthetic", encoding="utf-8")

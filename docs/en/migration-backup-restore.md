@@ -68,3 +68,5 @@ A projection failure does not roll back a committed database write. The result r
 A successful database change returns `committed: true` even if subsequent configuration or operation-log writes fail. `configuration: pending` and `operation_log.status: failed` identify those follow-up failures. Inspect the current schema with `doctor`, fix write permissions, and repair the configuration; do not rerun a committed migration or restore merely to retry a log write. Restore validates full-text postings and structured search terms before replacing the current database.
 
 Restore accepts closed standalone backup files. A source with pending WAL writes is rejected; create a fresh backup through `backup create` before retrying.
+
+Before restore, stop or disconnect every CLI/MCP process using the target database. Windows cannot replace a database file held open by another SQLite connection.

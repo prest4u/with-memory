@@ -273,6 +273,8 @@ class BackupRestorePurgeTests(TempServiceTest):
             snapshot = original_create(*args, **kwargs)
             with self.assertRaises(ConflictError):
                 writer.add("A concurrent write must not commit during restore.")
+            # Windows SQLite handles disallow replacement while still open.
+            writer.close()
             return snapshot
 
         try:
