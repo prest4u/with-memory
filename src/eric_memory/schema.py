@@ -10,6 +10,15 @@ from __future__ import annotations
 SCHEMA_VERSION = 2
 SEARCH_RANK_VERSION = "rrf-v1"
 
+FACTS_CONTENT_IMMUTABLE_SQL = """
+CREATE TRIGGER IF NOT EXISTS facts_content_immutable
+BEFORE UPDATE OF content ON facts
+WHEN old.content <> new.content
+BEGIN
+    SELECT RAISE(ABORT, 'fact content is immutable');
+END;
+"""
+
 SCHEMA_V2 = r"""
 CREATE TABLE IF NOT EXISTS schema_meta (
     key   TEXT PRIMARY KEY,

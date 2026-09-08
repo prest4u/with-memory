@@ -35,7 +35,7 @@ from .permissions import (
     FACT_SEARCH,
     LEGACY_CAPABILITIES,
 )
-from .schema import SCHEMA_V2, SCHEMA_VERSION, SEARCH_RANK_VERSION
+from .schema import FACTS_CONTENT_IMMUTABLE_SQL, SCHEMA_V2, SCHEMA_VERSION, SEARCH_RANK_VERSION
 from .scopes import ScopeSpec, scope_from_tags, validate_scope
 from .security import harden_private_path
 from .transactions import immediate_transaction
@@ -377,6 +377,41 @@ class MemoryStore:
         # write_transaction(). The argument remains for v1 API compatibility.
         del count_as_v2_write
 
+    IMPORT_NOISE_ENTITY_KEYS = frozenset(
+        {
+            "documents",
+            "users",
+            "pdf",
+            "stage",
+            "soft",
+            "signal",
+            "md",
+            "jsonl",
+            "txt",
+        }
+    )
+
+    def entity_cleanup_plan(self) -> list[dict[str, Any]]:
+        """Propose import-splitter leftovers. Does not unlink anything."""
+        rows = self._conn.execute(
+            """
+            SELECT e.entity_id, e.name, e.name_key, COUNT(fe.fact_id) AS fact_count
+            FROM entities e
+            LEFT JOIN fact_entities fe ON fe.entity_id = e.entity_id
+            GROUP BY e.entity_id, e.name, e.name_key
+            ORDER BY fact_count DESC, e.entity_id
+            """
+        ).fetchall()
+        return [
+            {
+                "entity_id": int(row["entity_id"]),
+                "name": str(row["name"]),
+                "fact_count": int(row["fact_count"]),
+            }
+            for row in rows
+            if int(row["fact_count"]) > 0 and str(row["name_key"]) in self.IMPORT_NOISE_ENTITY_KEYS
+        ]
+
     def _known_entity_names(self) -> list[str]:
         rows = self._conn.execute("SELECT name FROM entities ORDER BY entity_id").fetchall()
         return [str(row["name"]) for row in rows]
@@ -454,11 +489,14 @@ class MemoryStore:
             return {"kind": "user", "key": ""}
         return {"kind": str(row["scope_kind"]), "key": str(row["scope_key"])}
 
-    def _source_count_for_fact(self, fact_id: int) -> int:
+    def _source_count_for_fact(self, fact_id: int, source_ref: str = "") -> int:
         if self.schema_version < 2:
-            return 0
+            return 1 if source_ref.strip() else 0
         row = self._conn.execute("SELECT COUNT(*) AS count FROM fact_sources WHERE fact_id = ?", (fact_id,)).fetchone()
-        return int(row["count"])
+        count = int(row["count"])
+        if count == 0 and source_ref.strip():
+            return 1
+        return count
 
     def _row_to_fact(self, row: sqlite3.Row) -> Fact:
         keys = set(row.keys())
@@ -479,7 +517,7 @@ class MemoryStore:
             entities=self._entities_for(fact_id),
             fact_uid=str(row["fact_uid"]) if "fact_uid" in keys else "",
             scope=self._scope_for_fact(fact_id, str(row["tags"])),
-            source_count=self._source_count_for_fact(fact_id),
+            source_count=self._source_count_for_fact(fact_id, str(row["source_ref"] or "")),
         )
 
     def get_fact(self, fact_id: int) -> Fact | None:
@@ -775,6 +813,80 @@ class MemoryStore:
         assert updated is not None
         return self._row_to_fact(updated)
 
+    REDACTED_STUB = (
+        "Redacted: a credential was removed from this fact. "
+        "Rotate the exposed key outside With and do not store secrets here."
+    )
+
+    @classmethod
+    def redaction_stub(cls, fact_id: int, stub: str | None = None) -> str:
+        if stub is not None:
+            replacement = stub.strip()
+            if not replacement:
+                raise ValidationError("redaction stub must not be empty")
+            return replacement
+        return (
+            f"Redacted: a credential was removed from fact #{fact_id}. "
+            "Rotate the exposed key outside With and do not store secrets here."
+        )
+
+    def redact_fact(
+        self,
+        fact_id: int,
+        *,
+        actor: str = "local",
+        operation_uid: str | None = None,
+        stub: str | None = None,
+        reason: str = "",
+    ) -> Fact:
+        """Replace prohibited fact text. Does not delete the row."""
+        op = operation_uid or str(uuid.uuid4())
+        replacement = self.redaction_stub(fact_id, stub)
+        with self.write_transaction():
+            row = self._conn.execute("SELECT * FROM facts WHERE fact_id = ?", (fact_id,)).fetchone()
+            if row is None:
+                raise NotFoundError(f"fact_id {fact_id} not found")
+            old_tags = str(row["tags"] or "")
+            digest = normalized_content_hash(replacement)
+            # Fact bodies are immutable except this admin credential wipe.
+            # Dropping the trigger stays inside the write transaction.
+            self._conn.execute("DROP TRIGGER IF EXISTS facts_content_immutable")
+            # Explicitly update tags to refresh FTS using the original v2 trigger too.
+            self._conn.execute(
+                """
+                UPDATE facts
+                SET content = ?, tags = tags, normalized_content_hash = ?, updated_at = ?
+                WHERE fact_id = ?
+                """,
+                (replacement, digest, utc_now(), fact_id),
+            )
+            self._conn.execute(FACTS_CONTENT_IMMUTABLE_SQL)
+            self._conn.execute("DELETE FROM fact_search_terms WHERE fact_id = ?", (fact_id,))
+            self._index_search_terms(fact_id, replacement, old_tags)
+            metadata = {"reason_code": "credential"}
+            if reason:
+                metadata["reason"] = reason
+            self._audit(
+                "redact",
+                fact_id=fact_id,
+                actor=actor,
+                detail="credential",
+                operation_uid=op,
+                object_type="fact",
+                object_uid=str(row["fact_uid"]),
+                metadata=metadata,
+            )
+            self._change(
+                "redacted",
+                object_type="fact",
+                object_uid=str(row["fact_uid"]),
+                operation_uid=op,
+                metadata=metadata,
+            )
+            updated = self._conn.execute("SELECT * FROM facts WHERE fact_id = ?", (fact_id,)).fetchone()
+            assert updated is not None
+            return self._row_to_fact(updated)
+
     def deprecate(
         self,
         fact_id: int,
@@ -867,6 +979,9 @@ class MemoryStore:
                 "folders": int(self._conn.execute("SELECT COUNT(*) FROM folders").fetchone()[0]),
             }
             if self.schema_version >= 2:
+                result["files_current"] = int(
+                    self._conn.execute("SELECT COUNT(*) FROM files WHERE status = 'current'").fetchone()[0]
+                )
                 result["candidates_pending"] = int(
                     self._conn.execute("SELECT COUNT(*) FROM candidates WHERE status = 'pending'").fetchone()[0]
                 )
@@ -1629,6 +1744,99 @@ class MemoryStore:
                 (cursor, int(run["source_id"])),
             )
         return self.scan_run(run_uid)
+
+    def abandon_scan(self, run_uid: str, *, actor: str = "local") -> dict[str, Any]:
+        """Mark an open harvest error without advancing the source cursor."""
+        op = str(uuid.uuid4())
+        with self.write_transaction():
+            run = self._conn.execute("SELECT * FROM scan_runs WHERE run_uid = ?", (run_uid,)).fetchone()
+            if run is None:
+                raise NotFoundError(f"run_uid {run_uid} not found")
+            if str(run["status"]) != "open":
+                raise ConflictError(f"scan run is {run['status']}")
+            now = utc_now()
+            self._conn.execute(
+                """
+                UPDATE scan_runs
+                SET status = 'error', completed_at = ?, error_code = 'HARVEST_ABANDONED'
+                WHERE run_uid = ?
+                """,
+                (now, run_uid),
+            )
+            source = self._conn.execute(
+                "SELECT source_uid FROM sources WHERE source_id = ?",
+                (int(run["source_id"]),),
+            ).fetchone()
+            self._audit(
+                "harvest.abandon",
+                actor=actor,
+                detail="HARVEST_ABANDONED",
+                operation_uid=op,
+                object_type="scan_run",
+                object_uid=run_uid,
+                metadata={"source_uid": str(source["source_uid"]) if source else ""},
+            )
+        return self.scan_run(run_uid)
+
+    def resolve_scope_issue(
+        self,
+        fact_id: int,
+        scope: ScopeSpec,
+        *,
+        actor: str = "local",
+    ) -> dict[str, Any]:
+        """Confirm a fact already sits in the chosen scope and drop its import warning."""
+        op = str(uuid.uuid4())
+        with self.write_transaction():
+            fact = self.get_fact(fact_id)
+            if fact is None:
+                raise NotFoundError(f"fact_id {fact_id} not found")
+            current = validate_scope(fact.scope["kind"], fact.scope.get("key") or None)
+            if (current.kind, current.key.casefold()) != (scope.kind, scope.key.casefold()):
+                raise ValidationError("fact is not in the requested scope; changing scope is a separate write")
+            deleted = self._conn.execute(
+                "DELETE FROM migration_issues "
+                "WHERE issue_code = 'AMBIGUOUS_SCOPE_TAG' AND object_type = 'fact' AND object_id = ?",
+                (str(fact_id),),
+            ).rowcount
+            self._audit(
+                "migration.resolve_scope",
+                fact_id=fact_id,
+                actor=actor,
+                detail=scope.fingerprint,
+                operation_uid=op,
+                object_type="fact",
+                object_uid=fact.fact_uid,
+                metadata={"scope": scope.fingerprint, "issues_cleared": deleted},
+            )
+        return {"fact_id": fact_id, "scope": {"kind": scope.kind, "key": scope.key}, "issues_cleared": deleted}
+
+    def ack_migration_issues(self, *, actor: str = "local") -> int:
+        """Local admin: accept user-scope landing for leftover import tags."""
+        op = str(uuid.uuid4())
+        with self.write_transaction():
+            count = self._conn.execute(
+                """
+                DELETE FROM migration_issues
+                WHERE issue_code = 'AMBIGUOUS_SCOPE_TAG' AND object_type = 'fact'
+                  AND object_id IN (
+                    SELECT CAST(f.fact_id AS TEXT) FROM facts f
+                    JOIN fact_scopes fs ON fs.fact_id = f.fact_id
+                    JOIN scopes s ON s.scope_id = fs.scope_id
+                    WHERE s.scope_kind = 'user'
+                  )
+                """
+            ).rowcount
+            self._audit(
+                "migration.ack_scope_issues",
+                actor=actor,
+                detail=str(count),
+                operation_uid=op,
+                object_type="migration_issues",
+                object_uid="all",
+                metadata={"acked": count},
+            )
+        return count
 
     def scan_run(self, run_uid: str) -> dict[str, Any]:
         row = self._conn.execute(

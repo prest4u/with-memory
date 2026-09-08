@@ -64,19 +64,30 @@ def doctor_report(
         except Exception as exc:  # noqa: BLE001 - doctor reports, never mutates
             latest_backup = {"ok": False, "error": type(exc).__name__}
     scope_issues = 0
+    scope_issue_rows: list[dict[str, Any]] = []
     scan_health: list[dict[str, Any]] = []
     permission_health: dict[str, Any] = {}
     if store.schema_version >= 2:
-        scope_issues = int(store.connection.execute("SELECT COUNT(*) FROM migration_issues").fetchone()[0])
+        scope_issue_rows = [
+            {
+                "issue_code": str(row["issue_code"]),
+                "object_type": str(row["object_type"]),
+                "object_id": str(row["object_id"]),
+            }
+            for row in store.connection.execute(
+                "SELECT issue_code, object_type, object_id FROM migration_issues ORDER BY issue_id"
+            )
+        ]
+        scope_issues = sum(row["issue_code"] == "AMBIGUOUS_SCOPE_TAG" for row in scope_issue_rows)
         scan_health = [
             dict(row)
             for row in store.connection.execute(
                 """
-                SELECT s.source_uid, s.status AS source_status, sr.status AS run_status,
-                       sr.completed_at, sr.truncated, sr.error_code
+                SELECT s.source_uid, s.status AS source_status, sr.run_uid,
+                       sr.status AS run_status, sr.completed_at, sr.truncated, sr.error_code
                 FROM sources s LEFT JOIN scan_runs sr ON sr.run_uid = (
                     SELECT run_uid FROM scan_runs WHERE source_id = s.source_id
-                    ORDER BY started_at DESC LIMIT 1
+                    ORDER BY started_at DESC, rowid DESC LIMIT 1
                 ) ORDER BY s.source_id
                 """
             ).fetchall()
@@ -90,6 +101,7 @@ def doctor_report(
         }
     integrity = store.integrity()
     projection = store.projection_state()
+    counts = store.counts()
     paths = {
         "data_dir": _permissions(data, 0o700),
         "database": _permissions(Path(store.db_path), 0o600),
@@ -124,9 +136,14 @@ def doctor_report(
         "update_verification": update_verifier,
         "backup": {"count": len(backups), "latest": latest_backup},
         "projection": projection,
-        "index": {"files": store.counts()["files"], "scans": scan_health},
+        "index": {
+            "files": counts["files"],
+            "files_current": counts.get("files_current", counts["files"]),
+            "scans": scan_health,
+        },
         "access_control": permission_health,
         "migration_scope_issues": scope_issues,
+        "migration_issues": scope_issue_rows,
         "config": {
             "present": config is not None,
             "obsidian_enabled": bool(config.obsidian_enabled) if config else False,

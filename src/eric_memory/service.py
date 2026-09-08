@@ -171,7 +171,8 @@ class MemoryService:
             except Exception as state_exc:
                 payload["projection_state_error"] = type(state_exc).__name__
             payload["projection"] = "dirty"
-            payload["warning"] = {
+            warning_key = "projection_warning" if "warning" in payload else "warning"
+            payload[warning_key] = {
                 "code": "PROJECTION_DIRTY",
                 "message": "database commit succeeded; run `eric-memory sync` to repair the projection",
             }
@@ -235,6 +236,16 @@ class MemoryService:
                 if tier in {"simple", "full"}
                 else None
             ),
+        }
+
+    def entity_cleanup_plan(self) -> dict[str, Any]:
+        self._require_local_admin()
+        proposals = self.store.entity_cleanup_plan()
+        return {
+            "dry_run": True,
+            "proposals": proposals,
+            "applied": 0,
+            "note": "Review these possible import leftovers before removing any entity links.",
         }
 
     def status(self) -> dict[str, Any]:
@@ -430,6 +441,23 @@ class MemoryService:
         log_result = self._log_after_commit(operation_uid, "fact.deprecate", metadata={"fact_uid": fact.fact_uid})
         return self._project_after_commit({"fact": fact.to_dict(), **log_result}, operation_uid)
 
+    def redact(self, fact_id: int, *, reason: str = "") -> dict[str, Any]:
+        """Local admin only: wipe credential text from an existing fact."""
+        self._require_local_admin()
+        self._authorize_fact(FACT_WRITE, fact_id)
+        self._validate_safe_metadata(reason)
+        fact = self.store.get_fact(fact_id)
+        if fact is None:
+            raise NotFoundError(f"fact_id {fact_id} not found")
+        decision = inspect_content(fact.content)
+        if decision.action != "reject":
+            raise ValidationError("redact is only for facts that fail explicit credential policy")
+        operation_uid = str(uuid.uuid4())
+        self._before_write()
+        updated = self.store.redact_fact(fact_id, actor=self.principal_key, operation_uid=operation_uid, reason=reason)
+        log_result = self._log_after_commit(operation_uid, "fact.redact", metadata={"fact_uid": updated.fact_uid})
+        return self._project_after_commit({"fact": updated.to_dict(), **log_result}, operation_uid)
+
     # Candidates and local review -----------------------------------------
     @staticmethod
     def _iso_day(value: str | None) -> str:
@@ -520,13 +548,14 @@ class MemoryService:
                 "created": created,
             },
         )
-        return {
-            "candidate": candidate.to_dict(),
-            "created": created,
-            "operation_uid": operation_uid,
-            "committed": True,
-            **log_result,
-        }
+        return self._project_after_commit(
+            {
+                "candidate": candidate.to_dict(),
+                "created": created,
+                **log_result,
+            },
+            operation_uid,
+        )
 
     def candidate_list(self, *, status: str | None = "pending", limit: int = 100) -> dict[str, Any]:
         self._authorize(CANDIDATE_READ_OWN)
@@ -600,7 +629,10 @@ class MemoryService:
         log_result = self._log_after_commit(
             operation_uid, "candidate.reject", metadata={"candidate_uid": candidate_uid}
         )
-        return {"candidate": candidate.to_dict(), "operation_uid": operation_uid, "committed": True, **log_result}
+        return self._project_after_commit(
+            {"candidate": candidate.to_dict(), **log_result},
+            operation_uid,
+        )
 
     # Consent, scanning, and harvest --------------------------------------
     @staticmethod
@@ -651,6 +683,7 @@ class MemoryService:
                 self.store.principal_info(harness_key)
             except PermissionRequiredError:
                 self.store.ensure_principal(harness_key, display_name=harness_key)
+        operation_uid = str(uuid.uuid4())
         source = self.store.approve_source(
             canonical,
             harness_key=harness_key,
@@ -661,7 +694,7 @@ class MemoryService:
             actor=self.principal_key,
         )
         self.store.upsert_folder(canonical)
-        return {"source": source, "committed": True}
+        return self._project_after_commit({"source": source}, operation_uid)
 
     def source_list(self, *, include_revoked: bool = False) -> dict[str, Any]:
         self._authorize(STATUS_READ if self.principal_key == "local" else SOURCE_SCAN)
@@ -727,6 +760,35 @@ class MemoryService:
         result = self.store.complete_scan(run_uid, cursor=cursor)
         return {"run": result, "committed": True}
 
+    def harvest_abandon(self, run_uid: str) -> dict[str, Any]:
+        self._authorize(SOURCE_SCAN)
+        existing = self.store.scan_run(run_uid)
+        self._authorize_source_scan(str(existing["source_uid"]))
+        self._before_write()
+        run = self.store.abandon_scan(run_uid, actor=self.principal_key)
+        return {"run": run, "committed": True}
+
+    def ack_scope_issues(self) -> dict[str, Any]:
+        self._require_local_admin()
+        self._before_write()
+        acked = self.store.ack_migration_issues(actor=self.principal_key)
+        return {"acked": acked, "committed": True}
+
+    def resolve_scope_issue(
+        self,
+        fact_id: int,
+        *,
+        scope: str = "user",
+        project: str | None = None,
+        workspace: str | None = None,
+    ) -> dict[str, Any]:
+        self._require_local_admin()
+        self._authorize_fact(FACT_WRITE, fact_id)
+        scope_spec = scope_from_request(scope, project=project, workspace=workspace)
+        self._before_write()
+        result = self.store.resolve_scope_issue(fact_id, scope_spec, actor=self.principal_key)
+        return {**result, "committed": True}
+
     def source_scan(self, source_uid: str, *, max_files: int = MAX_FILES) -> dict[str, Any]:
         result = self.harvest_begin(source_uid, max_files=max_files)
         if result["status"] == "open":
@@ -738,8 +800,9 @@ class MemoryService:
     def source_revoke(self, source_uid: str) -> dict[str, Any]:
         self._require_local_admin()
         self._before_write()
+        operation_uid = str(uuid.uuid4())
         source = self.store.revoke_source(source_uid, actor=self.principal_key)
-        payload: dict[str, Any] = {"source": source, "committed": True}
+        payload: dict[str, Any] = {"source": source}
         try:
             self.context.store.forget_source(source_uid)
             payload["context_cleanup"] = "complete"
@@ -750,7 +813,7 @@ class MemoryService:
                 "error_code": type(exc).__name__,
                 "message": "Source access is revoked. Retry source revoke, or use local context reset --confirm.",
             }
-        return payload
+        return self._project_after_commit(payload, operation_uid)
 
     # Legacy folder/harness surfaces --------------------------------------
     def add_folder(self, path: str, *, label: str = "") -> dict[str, Any]:

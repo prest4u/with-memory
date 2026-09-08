@@ -174,6 +174,10 @@ def build_parser() -> argparse.ArgumentParser:
     deprecate.add_argument("--superseded-by", type=int)
     deprecate.add_argument("--reason", default="")
 
+    redact = sub.add_parser("redact", help="本地管理员抹去凭据正文，不作 purge")
+    redact.add_argument("fact_id", type=int)
+    redact.add_argument("--reason", default="")
+
     history = sub.add_parser("history", help="读取事实取代链和审计元数据")
     history.add_argument("fact_id", type=int)
 
@@ -253,6 +257,11 @@ def build_parser() -> argparse.ArgumentParser:
     source_scan.add_argument("source_uid")
     source_scan.add_argument("--max-files", type=int, default=100_000)
 
+    entity = sub.add_parser("entity", help="实体维护")
+    entity_sub = entity.add_subparsers(dest="entity_cmd", required=True)
+    entity_cleanup = entity_sub.add_parser("cleanup", help="提出导入拆词噪音；默认只预览")
+    entity_cleanup.add_argument("--dry-run", action="store_true", required=True)
+
     harvest = sub.add_parser("harvest", help="分两步收割；候选全部提交成功后才确认进度")
     harvest_sub = harvest.add_subparsers(dest="harvest_cmd", required=True)
     harvest_begin = harvest_sub.add_parser("begin")
@@ -261,13 +270,22 @@ def build_parser() -> argparse.ArgumentParser:
     harvest_complete = harvest_sub.add_parser("complete")
     harvest_complete.add_argument("run_uid")
     harvest_complete.add_argument("--cursor", required=True)
+    harvest_abandon = harvest_sub.add_parser("abandon", help="放弃未完成收割，不推进来源游标")
+    harvest_abandon.add_argument("run_uid")
 
     migrate = sub.add_parser("migrate", help="旁路迁移或精确回滚")
     migrate_action = migrate.add_mutually_exclusive_group(required=True)
     migrate_action.add_argument("--plan", action="store_true")
     migrate_action.add_argument("--apply", action="store_true")
     migrate_action.add_argument("--rollback", action="store_true")
+    migrate_action.add_argument(
+        "--ack-scope-issues",
+        action="store_true",
+        help="确认多 project 标签已落在 user scope，清掉 doctor 警告",
+    )
+    migrate_action.add_argument("--resolve-scope", type=int, metavar="FACT_ID")
     migrate.add_argument("--incremental-export")
+    _add_scope_arguments(migrate, default="user")
 
     backup = sub.add_parser("backup", help="SQLite 备份管理")
     backup_sub = backup.add_subparsers(dest="backup_cmd", required=True)
@@ -313,6 +331,8 @@ def _mode_for(args: argparse.Namespace) -> str:
         # Context writes target only working.sqlite3; the durable DB stays read-only.
         return "ro"
     if args.command in {"status", "doctor", "search", "history", "export", "verify"}:
+        return "ro"
+    if args.command == "entity" and args.entity_cmd == "cleanup" and args.dry_run:
         return "ro"
     if args.command == "source" and args.source_cmd == "list":
         return "ro"
@@ -457,6 +477,9 @@ def _dispatch(service: MemoryService, args: argparse.Namespace) -> int:
             as_json,
         )
         return 0
+    if args.command == "redact":
+        _print(service.redact(args.fact_id, reason=args.reason), as_json)
+        return 0
     if args.command == "history":
         _print(service.history(args.fact_id), True)
         return 0
@@ -468,6 +491,9 @@ def _dispatch(service: MemoryService, args: argparse.Namespace) -> int:
         return 0
     if args.command == "index-files":
         _print(service.index_files(args.folder), as_json)
+        return 0
+    if args.command == "entity":
+        _print(service.entity_cleanup_plan(), True)
         return 0
     if args.command == "harness":
         if args.harness_cmd == "add":
@@ -564,6 +590,8 @@ def _dispatch(service: MemoryService, args: argparse.Namespace) -> int:
     if args.command == "harvest":
         if args.harvest_cmd == "begin":
             _print(service.harvest_begin(args.source_uid, max_files=args.max_files), True)
+        elif args.harvest_cmd == "abandon":
+            _print(service.harvest_abandon(args.run_uid), True)
         else:
             _print(service.harvest_complete(args.run_uid, cursor=args.cursor), True)
         return 0
@@ -572,6 +600,20 @@ def _dispatch(service: MemoryService, args: argparse.Namespace) -> int:
             _print(service.migrate_plan(), True)
         elif args.apply:
             _print(service.migrate_apply(), True)
+        elif args.ack_scope_issues:
+            _print(service.ack_scope_issues(), True)
+            return 0
+        elif args.resolve_scope is not None:
+            _print(
+                service.resolve_scope_issue(
+                    args.resolve_scope,
+                    scope=args.scope,
+                    project=args.project,
+                    workspace=args.workspace,
+                ),
+                True,
+            )
+            return 0
         else:
             plan = service.rollback_plan()
             confirm_loss = False

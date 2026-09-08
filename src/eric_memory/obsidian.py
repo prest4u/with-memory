@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from .content_policy import inspect_content
 from .models import Fact
 from .paths import atomic_write_text, require_absolute
 from .store import MemoryStore
@@ -29,13 +30,19 @@ def _code_escape(text: str) -> str:
     return text.replace("`", "ˋ").replace("\r", " ").replace("\n", " ")
 
 
-def _fact_line(fact: Fact) -> str:
-    entities = "、".join(fact.entities[:8])
-    extra = f" · {entities}" if entities else ""
+def _fact_line(fact: Fact, *, include_body: bool = True) -> str:
     successor = f" → 被 {fact.superseded_by} 取代" if fact.superseded_by else ""
-    return (
-        f"- **#{fact.fact_id}** `{fact.category}` {fact.as_of}{extra}{successor}\n  {_md_escape(fact.content)[:400]}\n"
-    )
+    header = f"- **#{fact.fact_id}** `{fact.category}` {fact.as_of}{successor}"
+    if not include_body:
+        return f"{header}\n  投影不重复已过期正文。需要历史时用获准的 history 检索。\n"
+    decision = inspect_content(fact.content)
+    body = fact.content if decision.action != "reject" else decision.safe_summary
+    extra = ""
+    if decision.action != "reject":
+        entities = "、".join(fact.entities[:8])
+        extra = f" · {entities}" if entities else ""
+        header = f"- **#{fact.fact_id}** `{fact.category}` {fact.as_of}{extra}{successor}"
+    return f"{header}\n  {_md_escape(body)[:400]}\n"
 
 
 def render_home(store: MemoryStore) -> str:
@@ -53,9 +60,9 @@ def render_home(store: MemoryStore) -> str:
         f"- 现行事实：{counts['active']}",
         f"- 已过期（仍保留）：{counts['deprecated']}",
         f"- 实体：{counts['entities']}",
-        f"- 已索引文件：{counts['files']}",
+        f"- 现行索引文件：{counts.get('files_current', counts['files'])}",
         f"- 已接工具：{counts['harnesses']}",
-        f"- 已点头的资料夹：{counts['folders']}",
+        f"- 已点头的资料夹：{len(folders)}",
         f"- 待审候选：{counts.get('candidates_pending', 0)}",
         "",
         "## 打开",
@@ -109,7 +116,7 @@ def render_facts(store: MemoryStore, *, status: str, title: str, intro: str, lim
         lines.append("")
         return "\n".join(lines)
     for fact in facts:
-        lines.append(_fact_line(fact))
+        lines.append(_fact_line(fact, include_body=status == "active"))
     if len(facts) >= limit:
         lines.append(f"只列出最近 {limit} 条。更多请用 `eric-memory search`。")
         lines.append("")

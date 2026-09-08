@@ -57,6 +57,16 @@ class McpCliTests(TempServiceTest):
         shown = self._cli("search", "验收", "--include-deprecated")
         self.assertEqual(shown["facts"][0]["status"], "deprecated")
 
+    def test_cli_redact_replaces_secret_and_hides_it_from_search(self) -> None:
+        secret = "sk-" + ("c" * 40)
+        fact, _ = self.service.store.add_fact_with_result(secret)
+        wiped = self._cli("redact", str(fact.fact_id), "--reason", "cli review cleanup")
+        self.assertNotIn("sk-", wiped["fact"]["content"])
+        found = self._cli("search", "Redacted", "--include-deprecated")
+        self.assertTrue(any(item["fact_id"] == fact.fact_id for item in found["facts"]))
+        leaked = self._cli("search", secret[:16], "--include-deprecated")
+        self.assertFalse(any(secret in item["content"] for item in leaked["facts"]))
+
     def test_mcp_matches_cli_actions(self) -> None:
         add_rpc = handle_rpc(
             self.service,
